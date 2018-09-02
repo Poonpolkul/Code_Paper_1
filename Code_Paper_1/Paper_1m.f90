@@ -53,6 +53,10 @@ module globals
     real*8, parameter :: alpha = 0.36d0
     real*8, parameter :: delta = 1d0-(1d0-0.0823d0)
     real*8, parameter :: Omega = 1.60d0 ! Need shock process
+    
+    ! aggregate risk process [just use parameter from Fehr's HH risk process. Need to adjust later]
+    real*8, parameter :: rho         = 0.98d0
+    real*8, parameter :: sigma_eps   = 0.05d0
 
     ! size of the risky asset grid
     real*8, parameter :: k_l    = 0.0d0
@@ -91,7 +95,7 @@ module globals
 
     ! the shock process
     real*8 :: dist_theta(NP), theta(NP)
-    real*8 :: pi(NS, NS)
+    real*8 :: pi(NS, NS), EtaShock(NS)
 !~     real*8 :: eta(NS)
     integer :: is_initial = 3
 
@@ -101,8 +105,8 @@ module globals
     real*8 :: eff(JJ)
 
     ! individual variables
-    real*8 :: k(0:NK), kplus(JJ, 0:NK, NP, NS)
-    real*8 :: b(0:NB), bplus(JJ, 0:NB, NP, NS)
+    real*8 :: k(0:NK), kplus(JJ, 0:NK, 0:NB, NP, NS)
+    real*8 :: b(0:NB), bplus(JJ, 0:NK, 0:NB, NP, NS)
     real*8 :: c(JJ, 0:NK, 0:NB, NP, NS), l(JJ, 0:NK, 0:NB, NP, NS)
     real*8 :: phi(JJ, 0:NK, 0:NB, NP, NS), V(JJ, 0:NK, 0:NB, NP, NS) = 0d0
 
@@ -111,8 +115,9 @@ module globals
     real*8 :: RHS1(JJ, 0:NK, 0:NB, NP, NS), RHS2(JJ, 0:NK, 0:NB, NP, NS)
     real*8 :: RHSN1(JJ, 0:NK, 0:NB, NP, NS), RHSN2(JJ, 0:NK, 0:NB, NP, NS)
     real*8 :: RHSD1(JJ, 0:NK, 0:NB, NP, NS), RHSD2(JJ, 0:NK, 0:NB, NP, NS)
-    integer :: ij_com, ik_com, ib_com, ip_com, is_com, it_com
+    integer :: i, ij_com, ik_com, ib_com, ip_com, is_com, it_com
     real*8 :: k_in_next, b_in_next, k_temp, b_temp
+    real*8 :: k_in, b_in
     real*8 :: cons_com, lab_com, DIFF, INC_init
 
 contains
@@ -123,16 +128,19 @@ contains
         implicit none
         
         real*8, intent(in) :: l_in
-        real*8 :: lab_com, phi, eta, tauw, bplus, kplus, rb, rk, delta
-        real*8 :: implicitl, sigma, varphi1, varphi2, wage, b, k
+        real*8 :: lab_com, bplus, kplus, rk
+        real*8 :: implicitl, wage, b, k
         
         ! calculate labour
         lab_com = l_in
         
+        ! calculate the wage rate
+        wage = wn*eff(ij_com)*theta(ip_com)
+        
         ! calculate implicit value of labour
-        implicitl = ((1d0\phi)*(1d0-l_in)**eta*(1d0-tauw)*wage)**(1d0-sigma) &
+        implicitl = ((1d0/phiu)*(1d0-l_in)**eta*(1d0-tauw)*wage)**(1/sigma) &
         + bplus(ij_com, ib_com, ip_com, is_com)+kplus(ij_com, ib_com, ip_com, is_com) &
-        - (1d0+rb)*b(ib_com) - rk*k(ik_com) - (1d0-delta)*k(ik_com) &
+        - (1d0+rb)*b(ib_com) - (k(ik_com)/KK)*(YY-wn*LL) - (1d0-delta)*k(ik_com) &
         -(1-tauw)*wage*l_in-varphi1*(kplus(ij_com, ib_com, ip_com, is_com)-k(ik_com))**varphi2
         
     end function
@@ -142,19 +150,20 @@ contains
     
         implicit none
         real*8, intent(in) :: k_in
-        real*8 :: fock, k_plus, b_in, b_plus, varphi, tomorrow, wage
-        real*8 :: available, varphi1, varphi2
+        real*8 :: fock, kplus, l_in, varphi, tomorrow1, tomorrow2, wage
+        real*8 :: available
         integer :: ikl, ikr
+        logical :: check
 
         ! calculate tomorrows assets
-        k_plus = k_in
-        b_blus = b_in
+        kplus = k_in
+        bplus = b_in
 
         ! calculate the wage rate
         wage = wn*eff(ij_com)*theta(ip_com)
         
         ! calculate available resources
-        available = (1d0+rkn-delta)*k(ik_com) +(1d0+rbn)*b(ib_com)+ pen(ij_com)
+        available = (k(ik_com)/KK)*(YY-wn*LL)+(1d0-delta)*k(ik_com) + (1d0+rbn)*b(ib_com) + pen(ij_com)
         
         ! determine labour
         if (ij_com < JR) then
@@ -167,10 +176,10 @@ contains
         
         ! calculate consumption
         cons_com = max((available + (1-tauw)*wage*lab_com - kplus &
-         - bplus(ij_com, ib_com, ip_com, is_com) - varphi1*(kplus-k(ik_com))**varphi2), 1d-10)
+         - bplus(ij_com, ik_com, ib_com, ip_com, is_com) - varphi1*(kplus-k(ik_com))**varphi2), 1d-10)
 
         ! calculate linear interpolation for future part of first order condition
-        call linint_Grow(k_plus, k_l, k_u, k_grow, NA, ikl, ikr, varphi)
+        call linint_Grow(kplus, k_l, k_u, k_grow, NK, ikl, ikr, varphi)
 
         tomorrow1 = varphi*RHS1(ij_com+1, ikl, ib_com, ip_com, is_com) + &
                   (1d0-varphi)*RHS1(ij_com+1, ikr, ib_com, ip_com, is_com)
@@ -181,24 +190,25 @@ contains
         
     end function
     
-    ! calculated the first and second FOCs vary in b_plus (eq 20 & 21)
-    function FOCB(...)
+    ! calculated the first and second FOCs vary in bplus (eq 20 & 21)
+    function FOCB(b_in)
     
         implicit none
         real*8, intent(in) :: b_in
-        real*8 :: fock, k_plus, k_in, b_plus, varphi, tomorrow, wage
-        real*8 :: available, varphi1, varphi2
+        real*8 :: focb, l_in, bplus, varphi, tomorrow1, tomorrow2, wage
+        real*8 :: available
         integer :: ibl, ibr
+        logical :: check
 
         ! calculate tomorrows assets
-        k_plus = k_in
-        b_blus = b_in
+        kplus = k_in
+        bplus = b_in
 
         ! calculate the wage rate
         wage = wn*eff(ij_com)*theta(ip_com)
         
         ! calculate available resources
-        available = (1d0+rkn-delta)*k(ik_com) +(1d0+rbn)*b(ib_com)+ pen(ij_com)
+        available = (k(ik_com)/KK)*(YY-wn*LL)+(1d0-delta)*k(ik_com) + (1d0+rbn)*b(ib_com) + pen(ij_com)
         
         ! determine labour
         if (ij_com < JR) then
@@ -210,11 +220,11 @@ contains
         endif
         
         ! calculate consumption
-        cons_com = max((available + (1-tauw)*wage*lab_com - kplus &
-         - bplus(ij_com, ib_com, ip_com, is_com) - varphi1*(kplus-k(ik_com))**varphi2), 1d-10)
+        cons_com = max((available + (1-tauw)*wage*lab_com - kplus(ij_com, ik_com, ib_com, ip_com, is_com)  & 
+        - bplus - varphi1*(kplus(ij_com, ik_com, ib_com, ip_com, is_com)-k(ik_com))**varphi2) ,1d-10)
 
         ! calculate linear interpolation for future part of first order condition
-        call linint_Grow(b_plus, b_l, b_u, b_grow, NA, ibl, ibr, varphi)
+        call linint_Grow(bplus, b_l, b_u, b_grow, NB, ibl, ibr, varphi)
 
         tomorrow1 = varphi*RHS1(ij_com+1, ik_com, ibl, ip_com, is_com) + &
                   (1d0-varphi)*RHS1(ij_com+1, ik_com, ibr, ip_com, is_com)
@@ -232,7 +242,7 @@ contains
         implicit none
         integer, intent(in) :: ij, ip, is
         real*8, intent(in) :: kplus, bplus, cons, lab
-        real*8 :: valuefunc, varphik, varphib, c_help, l_help
+        real*8 :: valuefunc, varphik, varphib, c_help, l_help, egam
         integer :: ikl, ikr, ibl, ibr
 
         ! check whether consumption or leisure are too small
@@ -240,8 +250,8 @@ contains
         l_help = min(max(lab, 0d0),1d0-1d-10)
 
         ! get tomorrows utility using bilinear interbolation
-        call linint_Grow(kplus, k_l, k_u, k_grow, NA, ikl, ikr, varphik)
-        call linint_Grow(bplus, b_l, b_u, b_grow, NA, ibl, ibr, varphib)
+        call linint_Grow(kplus, k_l, k_u, k_grow, NK, ikl, ikr, varphik)
+        call linint_Grow(bplus, b_l, b_u, b_grow, NK, ibl, ibr, varphib)
         
         ! calculate tomorrow's part of the value function 
         valuefunc = 0d0
@@ -250,7 +260,7 @@ contains
                        + (1d0-varphik)*varphib*EV(ij+1, ikr, ibl, ip, is) &
                        + varphik*(1d0-varphib)*EV(ij+1, ikl, ibr, ip, is) &
                        + (1d0-varphik)*(1d0-varphib)*EV(ij+1, ikr, ibr, ip, is) &
-                       , 1d-10)**egam/egam
+                       , 1d-10)
         endif
 
         ! add todays part and discount

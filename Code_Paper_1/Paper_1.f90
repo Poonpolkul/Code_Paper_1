@@ -34,10 +34,10 @@ program SOLG_LR
     open(21, file='output_final.out')
 
     ! set reform variables
-    reform_on = .true.
+    ageing_on = .true.
 
     ! set reform values (Table 11.3, different rows)
-    tax = 1    ;    tauw = 0d0    ;    taur = 0d0  ! Simulation (1)
+    tax = 1    ;    tauw = 0d0    ;    taurb = 0d0  ; taurk = 0d0 ! Simulation (1)
     !tax = 3    ;    taur = 0d0                     ! Simulation (2)
     !kappa = 0d0                                    ! Simulation (3)
 
@@ -77,7 +77,7 @@ contains
             call government()
 
             write(*,'(i4,5f8.2,f12.5)')iter, (/5d0*KK, CC, II/)/YY*100d0, &
-                                       r, w, DIFF/YY*100d0
+                                       rb, rk, w, DIFF/YY*100d0
             if(abs(DIFF/YY)*100d0 < sig)then
                 call toc
                 call output()
@@ -97,7 +97,7 @@ contains
     subroutine initialize
 
         implicit none
-        integer :: ij, ip, is
+        integer :: ij, ip, is, ib, ik
 
         write(*,'(/a/)')'INITIAL EQUILIBRIUM'
         write(*,'(a)')'ITER     K/Y     C/Y     I/Y       r       w        DIFF'
@@ -116,11 +116,17 @@ contains
         do ij = 1, JJ
             do ip = 1, NP
                 do is = 1, NS
-                    kplus(ij, :, ip, is) = max(k(:)/2d0, k(1)/2d0) !!why include k(1)/2d0? isnt it already in k(:)/2d0? 
-                    bplus(ij, :, ip, is) = max(b(:)/2d0, b(1)/2d0)
+                    do ib = 1,NB
+                        do ik = 1,NK
+                            kplus(ij, :, ib, ip, is) = max(k(:)/2d0, k(1)/2d0) !!why include k(1)/2d0? isnt it already in k(:)/2d0? 
+                            bplus(ij, ik, :, ip, is) = max(b(:)/2d0, b(1)/2d0)
+                        enddo
+                    enddo
                 enddo
             enddo
         enddo
+
+!~         enddo
 
         ! initialize age earnings process
         open(11,file='ef.txt')
@@ -140,13 +146,15 @@ contains
 
 
         ! calculate the shock process
-        call discretize_AR(rho, 0d0, sigma_eps, eta, pi)
+        call discretize_AR(rho, 0d0, sigma_eps, EtaShock, pi)
+        EtaShock = exp(EtaShock)
 
         ! tax and transfers
         tax   = 2
         tauc  = 0.075d0
         tauw  = 0.0d0
-        taur  = 0.0d0
+        taurk = 0.0d0
+        taurb  = 0.0d0
         taup  = 0.1d0
         kappa = 0.5d0
         gy    = 0.19d0
@@ -191,11 +199,11 @@ contains
         integer :: ij, ik, ib, ip, ip_max, is, is_max
         real*8 :: k_in, b_in, wage, available
         logical :: check
-
+        
         ! get decision in the last period of life
         do ik = 0, NK
             do ib = 0, NB
-                aplus(JJ, ik, ib, :, :) = 0d0
+                kplus(JJ, ik, ib, :, :) = 0d0
                 bplus(JJ, ik, ib, :, :) = 0d0
                 c(JJ, ik, ib, :, :) = ((1d0+rkn)*k(ik) + (1d0+rbn)*b(ib) + pen(JJ))/p
                 l(JJ, ik, ib, :, :) = 0d0
@@ -223,8 +231,8 @@ contains
 
                     ! determine decision for zero assets at retirement without pension
                     if(ij >= JR .and. ik == 0 .and. ib == 0 .and. kappa <= 1d-10)then
-                        kplus(ij, ik, :, :) = 0d0
-                        bplus(ij, ib, :, :) = 0d0
+                        kplus(ij, ik, ib, :, :) = 0d0
+                        bplus(ij, ik, ib, :, :) = 0d0
                         c(ij, ik, ib, :, :) = 0d0
                         l(ij, ik, ib, :, :) = 0d0
                         V(ij, ik, ib, :, :) = valuefunc(0d0, 0d0, 0d0, 0d0, ij, 1, 1)
@@ -248,26 +256,33 @@ contains
                             is_com = is
 
                             ! solve the household problem using rootfinding
-                            do while (max(abs(k_in-k_in_next), abs(b_in-b_in_next)) >= sig) 
-                                k_in = k_in_next
+                            do while (abs(k_in_next-k_in) >= sig) 
+                            
                                 b_in = b_in_next
+                                k_in = k_in_next
                                 k_temp = k_in
-                                b_temp = b_in
                                 
                                 call fzero(k_in, fock, check)
-                                call fzero(b_in, focb, check)
+                               
+                                
+                                do while (abs(b_in_next-b_in)>= sig) 
+                                    b_in = b_in_next
+                                    b_temp = b_in
+                                    call fzero(b_in, focb, check)
+                                    b_in_next = b_in
+                                    b_in = b_temp
+                                end do
                                 
                                 k_in_next = k_in
-                                b_in_next = b_in
                                 k_in = k_temp
-                                b_in = b_temp
+                                
                             end do
                             
                             k_in = k_in_next
                             b_in = b_in_next
                             
                             ! write screen output in case of a problem
-                            if(check)write(*,'(a, 4i4)')'ERROR IN ROOTFINDING : ', ij, ia, ip, is
+                            if(check)write(*,'(a, 4i4)')'ERROR IN ROOTFINDING : ', ij, ik, ib, ip, is
 
 !~                             ! check for borrowing constraint
 !~                             if(x_in < 0d0)then
@@ -339,7 +354,7 @@ contains
                         enddo
                         
                         RHS1(ij, ik, ib, ip, is) = beta*RHSN1(ij, ik, ib, ip, is)*(1/RHSD1(ij, ik, ib, ip, is))
-                        EV1(ij, ik, ib, ip, is) = (egam*EV1(ij, ik, ib, ip, is))**(1d0/egam)
+!~                         EV(ij, ik, ib, ip, is) = EV(ij, ik, ib, ip, is))
                     enddo
                 enddo
             enddo
@@ -363,13 +378,12 @@ contains
                         ! calculate the RHS of the 2nd first order condition
                         ! RHSN = numerator term, RHSD = denominator term
                         RHSN2(ij, ik, ib, ip, is) = 0d0
-                        EV(ij, ik, ib, ip, is) = 0d0
+!~                         EV(ij, ik, ib, ip, is) = 0d0
                         do is_p = 1, NS
                             chelp = max(c(ij, ik, ib, ip, is_p),1d-10)
                             lhelp = max(l(ij, ik, ib, ip, is_p),1d-10)
                             RHSN2(ij, ik, ib, ip, is) = RHSN2(ij, ik, ib, ip, is) + &
-                                pi(is, is_p)*exp(-gamma*V(ij, ik, ib, ip, is_p))*chelp**(-sigma)*(1+rk-delta+varphi1)
-                                !********* need to correct FOC as varphi is a function of varphi 1 and varphi 2 (See Cwik)
+                                pi(is, is_p)*exp(-gamma*V(ij, ik, ib, ip, is_p))*chelp**(-sigma)*((k(ik_com)/KK)*(YY-wn*LL)-delta)
                             RHSD2(ij, ik, ib, ip, is) = RHSD2(ij, ik, ib, ip, is) + &
                                 pi(is, is_p)*exp(-gamma*V(ij, ik, ib, ip, is_p))
                         enddo
