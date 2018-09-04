@@ -128,8 +128,8 @@ contains
         implicit none
         
         real*8, intent(in) :: l_in
-        real*8 :: lab_com, bplus, kplus, rk
-        real*8 :: implicitl, wage, b, k
+        real*8 :: lab_com, rk
+        real*8 :: implicitl, wage
         
         ! calculate labour
         lab_com = l_in
@@ -139,9 +139,9 @@ contains
         
         ! calculate implicit value of labour
         implicitl = ((1d0/phiu)*(1d0-l_in)**eta*(1d0-tauw)*wage)**(1/sigma) &
-        + bplus(ij_com, ib_com, ip_com, is_com)+kplus(ij_com, ib_com, ip_com, is_com) &
+        + bplus(ij_com, ik_com, ib_com, ip_com, is_com)+kplus(ij_com, ik_com, ib_com, ip_com, is_com) &
         - (1d0+rb)*b(ib_com) - (k(ik_com)/KK)*(YY-wn*LL) - (1d0-delta)*k(ik_com) &
-        -(1-tauw)*wage*l_in-varphi1*(kplus(ij_com, ib_com, ip_com, is_com)-k(ik_com))**varphi2
+        -(1-tauw)*wage*l_in-varphi1*(kplus(ij_com, ik_com, ib_com, ip_com, is_com)-k(ik_com))**varphi2
         
     end function
 

@@ -126,8 +126,6 @@ contains
             enddo
         enddo
 
-!~         enddo
-
         ! initialize age earnings process
         open(11,file='ef.txt')
         do i = 1, JR
@@ -181,8 +179,8 @@ contains
 
         implicit none
 
-        rk = Omega*alpha*(KK/LL)**(alpha-1d0)-delta
-        rb = rk !???
+        rk = Omega*alpha*(KK/LL)**(alpha-1d0)-delta !  ???
+        rb = rk-delta !  ???
         w = Omega*(1d0-alpha)*(KK/LL)**alpha
         rkn = rk*(1d0-taurk)
         rbn = rb*(1d0-taurb)
@@ -397,126 +395,145 @@ contains
     end subroutine
 
 
-!~     ! determines the invariant distribution of households
-!~     subroutine get_distribution()
+    ! determines the invariant distribution of households
+    subroutine get_distribution()
 
-!~         implicit none
-!~         integer :: ij, ia, ip, is, is_p, ial, iar
-!~         real*8 :: varphi
+        implicit none
+        integer :: ij, ik, ib, ip, is, is_p, ikl, ikr, ibl, ibr
+        real*8 :: varphib, varphik
 
-!~         ! set distribution to zero
-!~         phi(:, :, :, :) = 0d0
+        ! set distribution to zero
+        phi(:, :, :, :, :) = 0d0
 
-!~         ! get initial distribution in age 1
-!~         do ip = 1, NP
-!~             phi(1, 0, ip, is_initial) = dist_theta(ip)
-!~         enddo
+        ! get initial distribution in age 1
+        do ip = 1, NP
+            phi(1, 0, 0, ip, is_initial) = dist_theta(ip)
+        enddo
 
-!~         ! successively compute distribution over ages
-!~         do ij = 2, JJ
+        ! successively compute distribution over ages
+        do ij = 2, JJ
 
-!~             ! iterate over yesterdays gridpoints
-!~             do ia = 0, NA
-!~                 do ip = 1 , NP
-!~                     do is = 1, NS
+            ! iterate over yesterdays gridpoints
+            do ik = 0, NK
+                do ib = 0, NB
+                    do ip = 1 , NP
+                        do is = 1, NS
 
-!~                         ! interpolate yesterday's savings decision
-!~                         call linint_Grow(aplus(ij-1, ia, ip, is), a_l, a_u, a_grow, NA, ial, iar, varphi)
+                            ! interpolate yesterday's savings decision
+                            call linint_Grow(kplus(ij-1, ik, ib, ip, is), k_l, k_u, k_grow, NK, ikl, ikr, varphik)
+                            call linint_Grow(bplus(ij-1, ik, ib, ip, is), b_l, b_u, b_grow, NB, ibl, ibr, varphib)
 
-!~                         ! restrict values to grid just in case
-!~                         ial = min(ial, NA)
-!~                         iar = min(iar, NA)
-!~                         varphi = min(varphi, 1d0)
+                            ! restrict values to grid just in case
+                            ikl = min(ikl, NK)
+                            ikr = min(ikr, NK)
+                            ibl = min(ibl, NB)
+                            ibr = min(ibr, NB)
+                            varphik = min(varphik, 1d0)
+                            varphib = min(varphib, 1d0)
 
-!~                         ! redistribute households
-!~                         do is_p = 1, NS
-!~                             phi(ij, ial, ip, is_p) = phi(ij, ial, ip, is_p) + &
-!~                                                         pi(is, is_p)*varphi*phi(ij-1, ia, ip, is)
-!~                             phi(ij, iar, ip, is_p) = phi(ij, iar, ip, is_p) + &
-!~                                                         pi(is, is_p)*(1d0-varphi)*phi(ij-1, ia, ip, is)
-!~                         enddo
-!~                     enddo
-!~                 enddo
-!~             enddo
-!~         enddo
+                            ! redistribute households
+                            do is_p = 1, NS
+                                phi(ij, ikl, ibl, ip, is_p) = phi(ij, ikl, ibl, ip, is_p) + &
+                                                            pi(is, is_p)*varphik*varphib*phi(ij-1, ik, ib, ip, is)
+                                phi(ij, ikl, ibr, ip, is_p) = phi(ij, ikl, ibl, ip, is_p) + &
+                                                            pi(is, is_p)*varphik*(1d0-varphib)*phi(ij-1, ik, ib, ip, is)
+                                phi(ij, ikr, ibl, ip, is_p) = phi(ij, ikr, ib, ip, is_p) + &
+                                                            pi(is, is_p)*(1d0-varphik)*varphib*phi(ij-1, ik, ib, ip, is)
+                                phi(ij, ikl, ibr, ip, is_p) = phi(ij, ikl, ibl, ip, is_p) + &
+                                                            pi(is, is_p)*(1-varphik)*(1-varphib)*phi(ij-1, ik, ib, ip, is)
+                            enddo
+                        enddo
+                    enddo
+                enddo
+            enddo
+        enddo
 
-!~     end subroutine
-
-
-!~     ! subroutine for calculating quantities
-!~     subroutine aggregation()
-
-!~         implicit none
-!~         integer :: ij, ia, ip, is
-!~         real*8 :: workpop, LL_old
-
-!~         LL_old = LL
-
-!~         ! calculate cohort aggregates
-!~         c_coh(:) = 0d0
-!~         l_coh(:) = 0d0
-!~         y_coh(:) = 0d0
-!~         a_coh(:) = 0d0
-!~         v_coh(:) = 0d0
-
-!~         do ij = 1, JJ
-!~             do ia = 0, NA
-!~                 do ip = 1, NP
-!~                     do is = 1, NS
-!~                         c_coh(ij) = c_coh(ij) + c(ij, ia, ip, is)*phi(ij, ia, ip, is)
-!~                         l_coh(ij) = l_coh(ij) + l(ij, ia, ip, is)*phi(ij, ia, ip, is)
-!~                         y_coh(ij) = y_coh(ij) + eff(ij)*theta(ip)*eta(is)*l(ij, ia, ip, is)*phi(ij, ia, ip, is)
-!~                         a_coh(ij) = a_coh(ij) + a(ia)*phi(ij, ia, ip, is)
-!~                         v_coh(ij) = v_coh(ij) + V(ij, ia, ip, is)*phi(ij, ia, ip, is)
-!~                     enddo
-!~                 enddo
-!~             enddo
-!~         enddo
-
-!~         ! calculate aggregate quantities
-!~         CC = 0d0
-!~         LL = 0d0
-!~         HH = 0d0
-!~         AA = 0d0
-!~         workpop = 0d0
-!~         do ij = 1, JJ
-!~             CC = CC + c_coh(ij)*m(ij)
-!~             LL = LL + y_coh(ij)*m(ij)
-!~             HH = HH + l_coh(ij)*m(ij)
-!~             AA = AA + a_coh(ij)*m(ij)
-!~             if(ij < JR)workpop = workpop + m(ij)
-!~         enddo
-
-!~         ! damping and other quantities
-!~         KK = damp*(AA-BB) + (1d0-damp)*KK
-!~         LL = damp*LL + (1d0-damp)*LL_old
-!~         II = (n_p+delta)*KK
-!~         YY = Omega * KK**alpha * LL**(1d0-alpha)
-
-!~         ! get average income and average working hours
-!~         INC = w*LL/workpop
-!~         HH  = HH/workpop
-
-!~         ! get difference on goods market
-!~         DIFF = YY-CC-II-GG
-
-!~     end subroutine
+    end subroutine
 
 
-!~     ! subroutine for calculating government parameters
-!~     subroutine government()
+    ! subroutine for calculating quantities
+    subroutine aggregation()
 
-!~         implicit none
-!~         integer :: ij
-!~         real*8 :: expend
+        implicit none
+        integer :: ij, ik, ib, ip, is
+        real*8 :: workpop, LL_old, KK_old, BB_old
 
-!~         ! set government quantities and pension payments
+        LL_old = LL ! store current labour supply to LL_old
+        KK_old = KK
+        BB_old = BB
+
+        ! calculate cohort aggregates
+        c_coh(:) = 0d0
+        l_coh(:) = 0d0
+        y_coh(:) = 0d0
+        k_coh(:) = 0d0
+        b_coh(:) = 0d0
+        v_coh(:) = 0d0
+
+        do ij = 1, JJ
+            do ik = 0, NK
+                do ib = 0, NB
+                    do ip = 1, NP
+                        do is = 1, NS
+                            c_coh(ij) = c_coh(ij) + c(ij, ik, ib, ip, is)*phi(ij, ik, ib, ip, is)
+                            l_coh(ij) = l_coh(ij) + l(ij, ik, ib, ip, is)*phi(ij, ik, ib, ip, is)
+                            y_coh(ij) = y_coh(ij) + eff(ij)*theta(ip)*l(ij, ik, ib, ip, is)*phi(ij, ik, ib, ip, is)
+                            k_coh(ij) = k_coh(ij) + k(ik)*phi(ij, ik, ib, ip, is)
+                            b_coh(ij) = b_coh(ij) + b(ib)*phi(ij, ik, ib, ip, is)
+                            v_coh(ij) = v_coh(ij) + V(ij, ik, ib, ip, is)*phi(ij, ik, ib, ip, is)
+                        enddo
+                    enddo
+                enddo
+            enddo
+        enddo
+
+        ! calculate aggregate quantities
+        CC = 0d0
+        LL = 0d0
+        HH = 0d0
+        KK = 0d0
+        BB = 0d0
+        workpop = 0d0
+        do ij = 1, JJ
+            CC = CC + c_coh(ij)*m(ij)
+            LL = LL + l_coh(ij)*m(ij)
+            HH = HH + y_coh(ij)*m(ij)
+            KK = KK + k_coh(ij)*m(ij)
+            BB = BB + b_coh(ij)*m(ij)
+            if(ij < JR) workpop = workpop + m(ij)
+        enddo
+
+        ! damping and other quantities [damping acording to Gauss-Seidel procedure]
+        KK = damp*(KK) + (1d0-damp)*KK_old !check this
+        BB = damp*(BB) + (1d0-damp)*BB_old !check this
+        LL = damp*LL + (1d0-damp)*LL_old
+        II = (n_p+delta)*KK
+        YY = Omega * KK**alpha * LL**(1d0-alpha)
+
+        ! get average income and average working hours
+        INC = w*LL/workpop ! average labour earning
+        HH  = HH/workpop
+
+        ! get difference on goods market
+        DIFF = YY-CC-II-GG
+
+    end subroutine
+
+
+    ! subroutine for calculating government parameters
+    subroutine government()
+
+        implicit none
+        integer :: ij
+        real*8 :: expend
+
+        ! set government quantities and pension payments
 !~         if(.not. reform_on)then
 !~             GG = gy*YY
 !~             BB = by*YY
 !~         endif
 
-!~         ! calculate government expenditure
+        ! calculate government expenditure
 !~         expend = GG + (1d0+r)*BB - (1d0+n_p)*BB
 
 !~         ! get budget balancing tax rate
@@ -537,129 +554,134 @@ contains
 !~         taxrev(3) = taur*r*AA
 !~         taxrev(4) = sum(taxrev(1:3))
 
-!~         ! get budget balancing social security contribution
-!~         pen(JR:JJ) = kappa*INC
-!~         PP = 0d0
-!~         do ij = JR, JJ
-!~             PP = PP + pen(ij)*m(ij)
-!~         enddo
+        ! get budget balancing social security contribution
+        pen(JR:JJ) = kappa*INC
+        PP = 0d0
+        do ij = JR, JJ
+            PP = PP + pen(ij)*m(ij)
+        enddo
 
-!~         taup = PP/(w*LL)
+        taup = PP/(w*LL)
 
-!~     end subroutine
+    end subroutine
 
 
-!~     ! subroutine for writing output
-!~     subroutine output()
+    ! subroutine for writing output
+    subroutine output()
 
-!~         implicit none
-!~         integer :: ij, ia, ip, is, iamax(JJ)
-!~         real*8 :: temp
-!~         real*8 :: exp_c(JJ), exp_l(JJ), exp_y(JJ)
-!~         real*8 :: var_c(JJ), var_l(JJ), var_y(JJ)
-!~         real*8 :: mas_c(JJ), mas_l(JJ), mas_y(JJ)
+        implicit none
+        integer :: ij, ik, ib, ip, is, iamax(JJ)
+        real*8 :: temp
+        real*8 :: exp_c(JJ), exp_l(JJ), exp_y(JJ)
+        real*8 :: var_c(JJ), var_l(JJ), var_y(JJ)
+        real*8 :: mas_c(JJ), mas_l(JJ), mas_y(JJ)
+        
 
-!~         ! calculate cohort specific variances of logs
-!~         exp_c = 0d0 ; var_c = 0d0 ; mas_c = 0d0
-!~         exp_l = 0d0 ; var_l = 0d0 ; mas_l = 0d0
-!~         exp_y = 0d0 ; var_y = 0d0 ; mas_y = 0d0
-!~         do ij = 1, JJ
-!~             do ia = 0, NA
-!~                 do ip = 1, NP
-!~                     do is = 1, NS
+        ! calculate cohort specific variances of logs
+        exp_c = 0d0 ; var_c = 0d0 ; mas_c = 0d0
+        exp_l = 0d0 ; var_l = 0d0 ; mas_l = 0d0
+        exp_y = 0d0 ; var_y = 0d0 ; mas_y = 0d0
+        do ij = 1, JJ
+            do ik = 0, NK
+                do ib = 0, NB
+                    do ip = 1, NP
+                        do is = 1, NS
 
-!~                         ! consumption
-!~                         if(c(ij, ia, ip, is) > 0d0)then
-!~                             temp = log(c(ij, ia, ip, is))
-!~                             exp_c(ij) = exp_c(ij) + temp*phi(ij, ia, ip, is)
-!~                             var_c(ij) = var_c(ij) + temp**2*phi(ij, ia, ip, is)
-!~                             mas_c(ij) = mas_c(ij) + phi(ij, ia, ip, is)
-!~                         endif
+                            ! consumption
+                            if(c(ij, ik, ib, ip, is) > 0d0)then
+                                temp = log(c(ij, ik, ib, ip, is))
+                                exp_c(ij) = exp_c(ij) + temp*phi(ij, ik, ib, ip, is)
+                                var_c(ij) = var_c(ij) + temp**2*phi(ij, ik, ib, ip, is)
+                                mas_c(ij) = mas_c(ij) + phi(ij, ik, ib, ip, is)
+                            endif
 
-!~                         if(l(ij, ia, ip, is) > 0.01d0)then
+                            if(l(ij, ik, ib, ip, is) > 0.01d0)then
 
-!~                             ! hours
-!~                             temp = log(l(ij, ia, ip, is))
-!~                             exp_l(ij) = exp_l(ij) + temp*phi(ij, ia, ip, is)
-!~                             var_l(ij) = var_l(ij) + temp**2*phi(ij, ia, ip, is)
-!~                             mas_l(ij) = mas_l(ij) + phi(ij, ia, ip, is)
+                                ! hours
+                                temp = log(l(ij, ik, ib, ip, is))
+                                exp_l(ij) = exp_l(ij) + temp*phi(ij, ik, ib, ip, is)
+                                var_l(ij) = var_l(ij) + temp**2*phi(ij, ik, ib, ip, is)
+                                mas_l(ij) = mas_l(ij) + phi(ij, ik, ib, ip, is)
 
-!~                             ! earnings
-!~                             temp = log(w*eff(ij)*theta(ip)*eta(is)*l(ij, ia, ip, is))
-!~                             exp_y(ij) = exp_y(ij) + temp*phi(ij, ia, ip, is)
-!~                             var_y(ij) = var_y(ij) + temp**2*phi(ij, ia, ip, is)
-!~                             mas_y(ij) = mas_y(ij) + phi(ij, ia, ip, is)
-!~                         endif
-!~                     enddo
-!~                 enddo
-!~             enddo
-!~         enddo
-!~         exp_c = exp_c/max(mas_c, 1d-4) ; var_c = var_c/max(mas_c, 1d-4)
-!~         exp_l = exp_l/max(mas_l, 1d-4) ; var_l = var_l/max(mas_l, 1d-4)
-!~         exp_y = exp_y/max(mas_y, 1d-4) ; var_y = var_y/max(mas_y, 1d-4)
-!~         var_c = var_c - exp_c**2
-!~         var_l = var_l - exp_l**2
-!~         var_y = var_y - exp_y**2
+                                ! earnings
+                                temp = log(w*eff(ij)*theta(ip)*l(ij, ik, ib, ip, is))
+                                exp_y(ij) = exp_y(ij) + temp*phi(ij, ik, ib, ip, is)
+                                var_y(ij) = var_y(ij) + temp**2*phi(ij, ik, ib, ip, is)
+                                mas_y(ij) = mas_y(ij) + phi(ij, ik, ib, ip, is)
+                            endif
+                        enddo
+                    enddo
+                enddo
+            enddo
+        enddo
+        exp_c = exp_c/max(mas_c, 1d-4) ; var_c = var_c/max(mas_c, 1d-4)
+        exp_l = exp_l/max(mas_l, 1d-4) ; var_l = var_l/max(mas_l, 1d-4)
+        exp_y = exp_y/max(mas_y, 1d-4) ; var_y = var_y/max(mas_y, 1d-4)
+        var_c = var_c - exp_c**2
+        var_l = var_l - exp_l**2
+        var_y = var_y - exp_y**2
 
-!~         ! save initial equilibrium average income if no reform
-!~         if(.not. reform_on)INC_init = INC
+        ! save initial equilibrium average income if no reform
+        if(.not. ageing_on)INC_init = INC
 
-!~         ! Output
-!~         write(21,'(a/)')'STEADY STATE EQUILIBRIUM'
-!~         write(21,'(a)')'CAPITAL        K       A       B       r    p.a.'
-!~         write(21,'(8x,5f8.2)')KK, AA, BB,  r , ((1d0+r)**(1d0/5d0)-1d0)*100d0
-!~         write(21,'(a,3f8.2/)')'(in %)  ',(/KK, AA, BB/)/YY*500d0
+        ! Output
+        write(21,'(a/)')'STEADY STATE EQUILIBRIUM'
+        write(21,'(a)')'CAPITAL        K       B       rk      rb  rk p.a.  rb p.a.'
+        write(21,'(8x,5f8.2)')KK, BB, rk, rb , ((1d0+rk)**(1d0/5d0)-1d0)*100d0, ((1d0+rb)**(1d0/5d0)-1d0)*100d0 !check
+        write(21,'(a,3f8.2/)')'(in %)  ',(/KK, BB/)/YY*500d0
 
-!~         write(21,'(a)')'LABOR          L      HH     INC       w'
-!~         write(21,'(8x,4f8.2/)')LL, HH*100d0, INC, w
+        write(21,'(a)')'LABOR          L      HH     INC       w'
+        write(21,'(8x,4f8.2/)')LL, HH*100d0, INC, w
 
-!~         write(21,'(a)')'GOODS          Y       C       I       G    DIFF'
-!~         write(21,'(8x,4f8.2,f8.3)')YY,CC,II,GG,diff
-!~         write(21,'(a,4f8.2,f8.3/)')'(in %)  ',(/YY, CC, II, GG, diff/)/YY*100d0
+        write(21,'(a)')'GOODS          Y       C       I       G    DIFF'
+        write(21,'(8x,4f8.2,f8.3)')YY,CC,II,GG,diff
+        write(21,'(a,4f8.2,f8.3/)')'(in %)  ',(/YY, CC, II, GG, diff/)/YY*100d0
 
 !~         write(21,'(a)')'GOV         TAUC    TAUW    TAUR   TOTAL       G       B'
 !~         write(21,'(8x,6f8.2)')taxrev(1:4),GG,BB
 !~         write(21,'(a,6f8.2)')'(in %)  ',(/taxrev(1:4), GG, BB*5d0/)/YY*100d0
 !~         write(21,'(a,3f8.2/)')'(rate)  ',(/tauc, tauw, taur/)*100d0
 
-!~         write(21,'(a)')'PENS        TAUP     PEN      PP'
-!~         write(21,'(8x,6f8.2)')taup*w*LL, pen(JR), PP
-!~         write(21,'(a,3f8.2/)')'(in %)  ',(/taup, kappa, PP/YY/)*100d0
+        write(21,'(a)')'PENS        TAUP     PEN      PP'
+        write(21,'(8x,6f8.2)')taup*w*LL, pen(JR), PP
+        write(21,'(a,3f8.2/)')'(in %)  ',(/taup, kappa, PP/YY/)*100d0
 
-!~         ! check for the maximium grid point used
-!~         call check_grid(iamax)
+        ! check for the maximium grid point used
+        call check_grid(iamax)
 
-!~         write(21, '(a,a)')' IJ      CONS     LABOR  EARNINGS    INCOME    INCTAX      PENS    ASSETS', &
-!~             '    VAR(C)    VAR(L)    VAR(Y)     VALUE     IAMAX'
-!~         do ij = 1, JJ
-!~             write(21,'(i3,11f10.3,i10)')ij, c_coh(ij)/INC_init, l_coh(ij), (/w*y_coh(ij), wn*y_coh(ij)+rn*a_coh(ij), &
-!~                     tauw*w*y_coh(ij)+taur*r*a_coh(ij), pen(ij)-taup*w*y_coh(ij), 5d0*a_coh(ij)/)/INC_init, &
-!~                     var_c(ij), var_l(ij), var_y(ij), v_coh(ij), iamax(ij)
-!~         enddo
-!~         write(21,'(a/)')'--------------------------------------------------------------------'
+        write(21, '(a,a)')' IJ      CONS     LABOR  EARNINGS    INCOME    INCTAX      PENS    ASSETS', &
+            '    BONDs    VAR(C)    VAR(L)    VAR(Y)     VALUE     IAMAX'
+        do ij = 1, JJ
+            write(21,'(i3,11f10.3,i10)')ij, c_coh(ij)/INC_init, l_coh(ij), (/w*y_coh(ij), wn*y_coh(ij)+rkn*k_coh(ij), &
+                    tauw*w*y_coh(ij)+taurk*rk*k_coh(ij), pen(ij)-taup*w*y_coh(ij), 5d0*k_coh(ij), 5d0*b_coh(ij)/)/INC_init, &
+                    var_c(ij), var_l(ij), var_y(ij), v_coh(ij), iamax(ij)
+        enddo
+        write(21,'(a/)')'--------------------------------------------------------------------'
 
-!~     end subroutine
+    end subroutine
 
 
-!~     ! subroutine that checks for the maximum gridpoint used
-!~     subroutine check_grid(iamax)
+    ! subroutine that checks for the maximum gridpoint used
+    subroutine check_grid(iamax)
 
-!~         implicit none
-!~         integer :: iamax(JJ), ij, ia, ip, is
+        implicit none
+        integer :: iamax(JJ), ij, ik, ib, ip, is
 
-!~         iamax = 0
-!~         do ij = 1, JJ
+        iamax = 0
+        do ij = 1, JJ
 
-!~             ! check for the maximum asset grid point used at a certain age
-!~             do ia = 0, NA
-!~                 do ip = 1, NP
-!~                     do is = 1, NS
-!~                         if(phi(ij, ia, ip, is) > 1d-8)iamax(ij) = ia
-!~                     enddo
-!~                 enddo
-!~             enddo
-!~         enddo
+            ! check for the maximum asset grid point used at a certain age
+            do ik = 0, NK
+                do ib = 0, NB
+                    do ip = 1, NP
+                        do is = 1, NS
+                            if(phi(ij, ik, ib, ip, is) > 1d-8)iamax(ij) = ik
+                        enddo
+                    enddo
+                enddo
+            enddo
+        enddo
 
-!~     end subroutine
+    end subroutine
 
 end program
