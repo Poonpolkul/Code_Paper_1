@@ -38,8 +38,8 @@ module globals
     ! sigma and eta parameter value from Heer & Maussner 2012. Neeed gamma's value
     real*8, parameter :: gamma = 0.5 ! entropic risk aversion in Value function
     real*8, parameter :: beta  = 0.998
-    real*8, parameter :: sigma =2d0
-    real*8, parameter :: eta = 7
+    real*8, parameter :: sigma = 0.5 !2d0
+    real*8, parameter :: eta =  0.6 ! 7
     real*8, parameter :: phiu = 0.26 !for phi in utility. Value from HM(2012)
 
     ! household risk process
@@ -252,9 +252,9 @@ contains
         ! get tomorrows utility using bilinear interbolation
         call linint_Grow(kplus, k_l, k_u, k_grow, NK, ikl, ikr, varphik)
         call linint_Grow(bplus, b_l, b_u, b_grow, NK, ibl, ibr, varphib)
-        
+
         ! calculate tomorrow's part of the value function 
-        valuefunc = 0d0
+        valuefunc = 1d0 
         if(ij < JJ)then
             valuefunc = max(varphik*varphib*EV(ij+1, ikl, ibl, ip, is) &
                        + (1d0-varphik)*varphib*EV(ij+1, ikr, ibl, ip, is) &
@@ -263,11 +263,13 @@ contains
                        , 1d-10)
         endif
 
+print*, 'V', valuefunc
         ! add todays part and discount
         valuefunc = (c_help**(1d0-sigma))/(1d0 - sigma) & 
-        + phiu*((1d0-l_help)**(1d0-eta))/(1d0 - eta) &
-        - (beta/gamma)*dlog(valuefunc)
+        + phiu*((1d0-l_help)**(1d0-eta))/(1d0 - eta) & 
+        - (beta/gamma)*dlog(valuefunc) 
 
+print*, 'c, util, V', c_help, (c_help**(1d0-sigma))/(1d0 - sigma), valuefunc
     end function
 
 end module

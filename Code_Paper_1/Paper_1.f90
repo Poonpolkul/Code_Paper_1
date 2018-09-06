@@ -206,6 +206,7 @@ contains
                 c(JJ, ik, ib, :, :) = ((1d0+rkn)*k(ik) + (1d0+rbn)*b(ib) + pen(JJ))/p
                 l(JJ, ik, ib, :, :) = 0d0
                 V(JJ, ik, ib, :, :) = valuefunc(0d0, 0d0, c(JJ, ik, ib, 1, 1), l(JJ, ik, ib, 1, 1), JJ, 1, 1)
+print*, 'Hello World!'
             end do
         enddo
 
@@ -301,7 +302,6 @@ contains
                             c(ij, ik, ib, ip, is) = cons_com
                             l(ij, ik, ib, ip, is) = lab_com
                             V(ij, ik, ib, ip, is) = valuefunc(k_in, b_in, cons_com, lab_com, ij, ip, is)
-
                         enddo
 
                         ! copy decision in retirement age
@@ -348,7 +348,7 @@ contains
                                 pi(is, is_p)*exp(-gamma*V(ij, ik, ib, ip, is_p))*chelp**(-sigma)*(1+rb)
                             RHSD1(ij, ik, ib, ip, is) = RHSD1(ij, ik, ib, ip, is) + &
                                 pi(is, is_p)*exp(-gamma*V(ij, ik, ib, ip, is_p))
-                            EV(ij, ik, ib, ip, is)  = EV(ij, ik, ib, ip, is) + pi(is, is_p)*V(ij, ik, ib, ip, is_p)
+                            EV(ij, ik, ib, ip, is)  = EV(ij, ik, ib, ip, is) + pi(is, is_p)*exp(-gamma*V(ij, ik, ib, ip, is_p))
                         enddo
                         
                         RHS1(ij, ik, ib, ip, is) = beta*RHSN1(ij, ik, ib, ip, is)*(1/RHSD1(ij, ik, ib, ip, is))
