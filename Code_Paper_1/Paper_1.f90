@@ -80,7 +80,7 @@ contains
                                        rb, rk, w, DIFF/YY*100d0
             if(abs(DIFF/YY)*100d0 < sig)then
                 call toc
-                call output()
+!~                 call output()
                 return
             endif
         enddo
@@ -206,7 +206,6 @@ contains
                 c(JJ, ik, ib, :, :) = ((1d0+rkn)*k(ik) + (1d0+rbn)*b(ib) + pen(JJ))/p
                 l(JJ, ik, ib, :, :) = 0d0
                 V(JJ, ik, ib, :, :) = valuefunc(0d0, 0d0, c(JJ, ik, ib, 1, 1), l(JJ, ik, ib, 1, 1), JJ, 1, 1)
-print*, 'Hello World!'
             end do
         enddo
 
@@ -240,12 +239,9 @@ print*, 'Hello World!'
 
                     do ip = 1, ip_max
                         do is = 1, is_max
-
                             ! get initial guess for the individual choices
-                            k_in = 0d0
-                            b_in = 0d0
-                            k_in_next = kplus(ij, ik, ib, ip, is)
-                            b_in_next = bplus(ij, ik, ib, ip, is)
+                            k_in = kplus(ij, ik, ib, ip, is)
+                            b_in = bplus(ij, ik, ib, ip, is)
                             
                             ! set up communication variables
                             ij_com = ij
@@ -255,47 +251,12 @@ print*, 'Hello World!'
                             is_com = is
 
                             ! solve the household problem using rootfinding
-                            do while (abs(k_in_next-k_in) >= sig) 
-                            
-                                b_in = b_in_next
-                                k_in = k_in_next
-                                k_temp = k_in
-                                
-                                call fzero(k_in, fock, check)
-                               
-                                
-                                do while (abs(b_in_next-b_in)>= sig) 
-                                    b_in = b_in_next
-                                    b_temp = b_in
-                                    call fzero(b_in, focb, check)
-                                    b_in_next = b_in
-                                    b_in = b_temp
-                                end do
-                                
-                                k_in_next = k_in
-                                k_in = k_temp
-                                
-                            end do
-                            
-                            k_in = k_in_next
-                            b_in = b_in_next
+                            call fzero(k_in, fock, check)
+                            call fzero(b_in, focb, check)
                             
                             ! write screen output in case of a problem
                             if(check)write(*,'(a, 4i4)')'ERROR IN ROOTFINDING : ', ij, ik, ib, ip, is
-
-!~                             ! check for borrowing constraint
-!~                             if(x_in < 0d0)then
-!~                                 x_in = 0d0
-!~                                 wage = wn*eff(ij)*theta(ip)*eta(is)
-!~                                 available = (1d0+rn)*a(ia) + pen(ij)
-!~                                 if(ij < JR)then
-!~                                     lab_com = min( max(nu-(1d0-nu)*available/wage , 0d0) , 1d0-1d-10)
-!~                                 else
-!~                                     lab_com = 0d0
-!~                                 endif
-!~                                 cons_com = max( (available + wage*lab_com)/p , 1d-10)
-!~                             endif
-
+   
                             ! copy decisions
                             kplus(ij, ik, ib, ip, is) = k_in
                             bplus(ij, ik, ib, ip, is) = b_in
@@ -303,7 +264,6 @@ print*, 'Hello World!'
                             l(ij, ik, ib, ip, is) = lab_com
                             V(ij, ik, ib, ip, is) = valuefunc(k_in, b_in, cons_com, lab_com, ij, ip, is)
                         enddo
-
                         ! copy decision in retirement age
                         if(ij >= JR)then
                             kplus(ij, ik, ib, :, :) = kplus(ij, ik, ib, 1, 1)

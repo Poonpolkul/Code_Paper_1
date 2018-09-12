@@ -183,11 +183,10 @@ contains
 
         tomorrow1 = varphi*RHS1(ij_com+1, ikl, ib_com, ip_com, is_com) + &
                   (1d0-varphi)*RHS1(ij_com+1, ikr, ib_com, ip_com, is_com)
-        tomorrow2 = varphi*RHS2(ij_com+1, ikl, ib_com, ip_com, is_com) + &
-                  (1d0-varphi)*RHS2(ij_com+1, ikr, ib_com, ip_com, is_com)          
-        ! calculate the first order condition for consumption
-        fock = max(abs(cons_com**(-sigma) - tomorrow1), abs(cons_com**(-sigma) - tomorrow2))
         
+        ! calculate the first order condition for consumption
+        fock = abs(cons_com**(-sigma) - tomorrow1)
+print*, 'fock', fock !**********************************************************
     end function
     
     ! calculated the first and second FOCs vary in bplus (eq 20 & 21)
@@ -226,13 +225,11 @@ contains
         ! calculate linear interpolation for future part of first order condition
         call linint_Grow(bplus, b_l, b_u, b_grow, NB, ibl, ibr, varphi)
 
-        tomorrow1 = varphi*RHS1(ij_com+1, ik_com, ibl, ip_com, is_com) + &
-                  (1d0-varphi)*RHS1(ij_com+1, ik_com, ibr, ip_com, is_com)
         tomorrow2 = varphi*RHS2(ij_com+1, ik_com, ibl, ip_com, is_com) + &
                   (1d0-varphi)*RHS2(ij_com+1, ik_com, ibr, ip_com, is_com)          
         ! calculate the first order condition for consumption
-        focb = max(abs(cons_com**(-sigma) - tomorrow1), abs(cons_com**(-sigma) - tomorrow2))
-
+        focb = abs(cons_com**(-sigma) - tomorrow2)
+print*, 'focb', focb !**********************************************************
     end function
     
 
@@ -263,13 +260,11 @@ contains
                        , 1d-10)
         endif
 
-print*, 'V', valuefunc
         ! add todays part and discount
         valuefunc = (c_help**(1d0-sigma))/(1d0 - sigma) & 
         + phiu*((1d0-l_help)**(1d0-eta))/(1d0 - eta) & 
         - (beta/gamma)*dlog(valuefunc) 
 
-print*, 'c, util, V', c_help, (c_help**(1d0-sigma))/(1d0 - sigma), valuefunc
     end function
 
 end module
