@@ -76,7 +76,7 @@ contains
             ! determine the government parameters
             call government()
 
-            write(*,'(i4,5f8.2,f12.5)')iter, (/5d0*KK, CC, II/)/YY*100d0, &
+            write(*,'(i4,6f8.2,f12.5)')iter, (/5d0*KK, CC, II/)/YY*100d0, &
                                        rb, rk, w, DIFF/YY*100d0
             if(abs(DIFF/YY)*100d0 < sig)then
                 call toc
@@ -100,7 +100,7 @@ contains
         integer :: ij, ip, is, ib, ik
 
         write(*,'(/a/)')'INITIAL EQUILIBRIUM'
-        write(*,'(a)')'ITER     K/Y     C/Y     I/Y       r       w        DIFF'
+        write(*,'(a)')'ITER     K/Y     C/Y     I/Y       rb       rk       w        DIFF'
 
         ! set up population structure
         do ij = 1, JJ
@@ -127,15 +127,43 @@ contains
         enddo
 
         ! initialize age earnings process
-        open(11,file='ef.txt')
-        do i = 1, JR
-            read(11,*) eff(i)
-        end do
-        do i = JR+1, JJ
-            eff(:) = 0d0
-        end do
-        close(11)
+!~      ! initialize by calling eff value from HM's ef.txt
+!~         open(11,file='ef20.txt') ! average from ef.txt
 
+!~         do i = 1, JR
+!~             read(11,*) eff(i)
+!~             print*, eff(i), i
+!~         end do
+!~         close(11)
+
+!~         do i = JR+1, JJ
+!~             eff(:) = 0d0
+!~         end do
+        eff(1) = 1.0000d0
+        eff(2) = 1.3527d0
+        eff(3) = 1.6952d0
+        eff(4) = 1.8279d0
+        eff(5) = 1.9606d0
+        eff(6) = 1.9692d0
+        eff(7) = 1.9692d0
+        eff(8) = 1.9392d0
+        eff(9) = 1.9007d0
+        eff(JR:JJ) = 0d0
+        
+!~      ! initilize using average value from HM
+!~         eff(1) = 0.798d0
+!~         eff(2) = 0.9878575d0
+!~         eff(3) = 1.1671425d0
+!~         eff(4) = 1.235d0
+!~         eff(5) = 1.275d0
+!~         eff(6) = 1.3105d0
+!~         eff(7) = 1.3385d0
+!~         eff(8) = 1.3625d0
+!~         eff(9) = 1.3385d0
+!~         eff(10) = 1.3025d0
+!~         eff(JR+1:JJ) = 0d0
+
+print*, eff(1), eff(9)
         ! initialize fixed effect
         dist_theta = 1d0/dble(NP)
         theta(1)   = -sqrt(sigma_theta)
@@ -210,8 +238,8 @@ contains
         enddo
 
         ! interpolate individual RHS
-        call interpolate1(JJ)
-        call interpolate2(JJ)
+        call interpolate_b(JJ)
+        call interpolate_k(JJ)
 
         do ij = JJ-1, 1, -1
 
@@ -249,11 +277,11 @@ contains
                             ib_com = ib
                             ip_com = ip
                             is_com = is
-
+!~ print*, 'Hello'
                             ! solve the household problem using rootfinding
-                            call fzero(k_in, fock, check)
                             call fzero(b_in, focb, check)
-                            
+                            call fzero(k_in, fock, check)
+                                                        
                             ! write screen output in case of a problem
                             if(check)write(*,'(a, 4i4)')'ERROR IN ROOTFINDING : ', ij, ik, ib, ip, is
    
@@ -277,15 +305,15 @@ contains
             enddo
 
             ! interpolate individual RHS
-            call interpolate1(ij)
-            call interpolate2(ij)
+            call interpolate_b(ij)
+            call interpolate_k(ij)
         enddo
 
     end subroutine
 
 
-    ! for calculating the rhs of the first order condition 1 at age ij
-    subroutine interpolate1(ij)
+    ! for calculating the rhs of the first order condition for bond at age ij
+    subroutine interpolate_b(ij)
 
         implicit none
         integer, intent(in) :: ij
@@ -299,19 +327,19 @@ contains
 
                         ! calculate the RHS of the 1st first order condition and EV
                         ! RHSN = numerator term, RHSD = denominator term
-                        RHSN1(ij, ik, ib, ip, is) = 0d0
+                        RHSN_b(ij, ik, ib, ip, is) = 0d0
                         EV(ij, ik, ib, ip, is) = 0d0
                         do is_p = 1, NS
                             chelp = max(c(ij, ik, ib, ip, is_p),1d-10)
                             lhelp = max(l(ij, ik, ib, ip, is_p),1d-10)
-                            RHSN1(ij, ik, ib, ip, is) = RHSN1(ij, ik, ib, ip, is) + &
+                            RHSN_b(ij, ik, ib, ip, is) = RHSN_b(ij, ik, ib, ip, is) + &
                                 pi(is, is_p)*exp(-gamma*V(ij, ik, ib, ip, is_p))*chelp**(-sigma)*(1+rb)
-                            RHSD1(ij, ik, ib, ip, is) = RHSD1(ij, ik, ib, ip, is) + &
+                            RHSD_b(ij, ik, ib, ip, is) = RHSD_b(ij, ik, ib, ip, is) + &
                                 pi(is, is_p)*exp(-gamma*V(ij, ik, ib, ip, is_p))
                             EV(ij, ik, ib, ip, is)  = EV(ij, ik, ib, ip, is) + pi(is, is_p)*exp(-gamma*V(ij, ik, ib, ip, is_p))
                         enddo
                         
-                        RHS1(ij, ik, ib, ip, is) = beta*RHSN1(ij, ik, ib, ip, is)*(1/RHSD1(ij, ik, ib, ip, is))
+                        RHS_b(ij, ik, ib, ip, is) = beta*RHSN_b(ij, ik, ib, ip, is)*(1/RHSD_b(ij, ik, ib, ip, is))
 !~                         EV(ij, ik, ib, ip, is) = EV(ij, ik, ib, ip, is))
                     enddo
                 enddo
@@ -320,8 +348,8 @@ contains
 
     end subroutine
 
-! for calculating the rhs of the first order condition 2 at age ij
-    subroutine interpolate2(ij)
+! for calculating the rhs of the first order condition for capital at age ij
+    subroutine interpolate_k(ij)
 
         implicit none
         integer, intent(in) :: ij
@@ -335,18 +363,18 @@ contains
 
                         ! calculate the RHS of the 2nd first order condition
                         ! RHSN = numerator term, RHSD = denominator term
-                        RHSN2(ij, ik, ib, ip, is) = 0d0
+                        RHSN_k(ij, ik, ib, ip, is) = 0d0
 !~                         EV(ij, ik, ib, ip, is) = 0d0
                         do is_p = 1, NS
                             chelp = max(c(ij, ik, ib, ip, is_p),1d-10)
                             lhelp = max(l(ij, ik, ib, ip, is_p),1d-10)
-                            RHSN2(ij, ik, ib, ip, is) = RHSN2(ij, ik, ib, ip, is) + &
-                                pi(is, is_p)*exp(-gamma*V(ij, ik, ib, ip, is_p))*chelp**(-sigma)*((k(ik_com)/KK)*(YY-wn*LL)-delta)
-                            RHSD2(ij, ik, ib, ip, is) = RHSD2(ij, ik, ib, ip, is) + &
+                            RHSN_k(ij, ik, ib, ip, is) = RHSN_k(ij, ik, ib, ip, is) + &
+                                pi(is, is_p)*exp(-gamma*V(ij, ik, ib, ip, is_p))*chelp**(-sigma)*(1+(YY-wn*LL)/KK-delta)
+                            RHSD_k(ij, ik, ib, ip, is) = RHSD_k(ij, ik, ib, ip, is) + &
                                 pi(is, is_p)*exp(-gamma*V(ij, ik, ib, ip, is_p))
                         enddo
                         
-                        RHS2(ij, ik, ib, ip, is) = beta*RHSN2(ij, ik, ib, ip, is)*(1/RHSD2(ij, ik, ib, ip, is))
+                        RHS_k(ij, ik, ib, ip, is) = beta*RHSN_k(ij, ik, ib, ip, is)*(1/RHSD_k(ij, ik, ib, ip, is))
                     enddo
                 enddo
             enddo
