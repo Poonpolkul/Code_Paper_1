@@ -268,8 +268,8 @@ print*, eff(1), eff(9)
                     do ip = 1, ip_max
                         do is = 1, is_max
                             ! get initial guess for the individual choices
-                            k_in = kplus(ij, ik, ib, ip, is)
-                            b_in = bplus(ij, ik, ib, ip, is)
+                            k_in = kplus(ij+1, ik, ib, ip, is)
+                            b_in = bplus(ij+1, ik, ib, ip, is)
                             
                             ! set up communication variables
                             ij_com = ij
@@ -277,16 +277,42 @@ print*, eff(1), eff(9)
                             ib_com = ib
                             ip_com = ip
                             is_com = is
-!~ print*, 'Hello'
+!~ print*, ij, ik, ib, ip, is, 'kplus =', kplus(ij, ik, ib, ip, is), 'bplus =', bplus(ij, ik, ib, ip, is),&
+!~  'kplus1 =', kplus(ij+1, ik, ib, ip, is), 'bplus1 =', bplus(ij+1, ik, ib, ip, is)                            
                             ! solve the household problem using rootfinding
                             call fzero(b_in, focb, check)
+                            
+!~                             if check then
+!~                                 b_in = 0d0
+!~                             end if
+
                             call fzero(k_in, fock, check)
-                                                        
+                            
                             ! write screen output in case of a problem
-                            if(check)write(*,'(a, 4i4)')'ERROR IN ROOTFINDING : ', ij, ik, ib, ip, is
+                            if(check)write(*,'(a, 5i4)')'ERROR IN ROOTFINDING : ', ij, ik, ib, ip, is
    
+  
+
+                            ! check for borrowing constraint
+                            if(k_in < 0d0)then
+                                k_in = 0d0
+!~                                 wage = wn*eff(ij)*theta(ip)*eta(is)
+!~                                 available = (1d0+rn)*a(ia) + pen(ij)
+!~                                 if(ij < JR)then
+!~                                     lab_com = min( max(nu-(1d0-nu)*available/wage , 0d0) , 1d0-1d-10)
+!~                                 else
+!~                                     lab_com = 0d0
+!~                                 endif
+!~                                 cons_com = max( (available + wage*lab_com)/p , 1d-10)
+                            endif
+
+!~ print*, ij, ik, ib, ip, is, 'k_in =', k_in, 'b_in =', b_in, 'l_com =', lab_com    
+
                             ! copy decisions
                             kplus(ij, ik, ib, ip, is) = k_in
+                            
+!~ print*, 'kplus =', kplus(ij, ik, ib, ip, is)
+                            
                             bplus(ij, ik, ib, ip, is) = b_in
                             c(ij, ik, ib, ip, is) = cons_com
                             l(ij, ik, ib, ip, is) = lab_com
@@ -301,6 +327,44 @@ print*, eff(1), eff(9)
                             V(ij, ik, ib, :, :) = V(ij, ik, ib, 1, 1)
                         endif
                     enddo
+                    
+!~                     do ip = 1, ip_max
+!~                         do is = 1, is_max
+!~                             ! get initial guess for the individual choices
+!~                             k_in = kplus(ij, ik, ib, ip, is)
+!~                             b_in = bplus(ij, ik, ib, ip, is)
+                            
+!~                             ! set up communication variables
+!~                             ij_com = ij
+!~                             ik_com = ik
+!~                             ib_com = ib
+!~                             ip_com = ip
+!~                             is_com = is
+!~ print*, 'Hello', kplus(ij, ik, ib, ip, is), bplus(ij, ik, ib, ip, is)                            
+!~                             ! solve the household problem using rootfinding
+!~                             call fzero(b_in, focb, check)
+!~                             call fzero(k_in, fock, check)
+                                                        
+!~                             ! write screen output in case of a problem
+!~                             if(check)write(*,'(a, 5i4)')'ERROR IN ROOTFINDING : ', ij, ik, ib, ip, is
+   
+!~                             ! copy decisions
+!~                             kplus(ij, ik, ib, ip, is) = k_in
+!~                             bplus(ij, ik, ib, ip, is) = b_in
+!~                             c(ij, ik, ib, ip, is) = cons_com
+!~                             l(ij, ik, ib, ip, is) = lab_com
+!~                             V(ij, ik, ib, ip, is) = valuefunc(k_in, b_in, cons_com, lab_com, ij, ip, is)
+!~                         enddo
+!~                         ! copy decision in retirement age
+!~                         if(ij >= JR)then
+!~                             kplus(ij, ik, ib, :, :) = kplus(ij, ik, ib, 1, 1)
+!~                             bplus(ij, ik, ib, :, :) = bplus(ij, ik, ib, 1, 1)
+!~                             c(ij, ik, ib, :, :) = c(ij, ik, ib, 1, 1)
+!~                             l(ij, ik, ib, :, :) = l(ij, ik, ib, 1, 1)
+!~                             V(ij, ik, ib, :, :) = V(ij, ik, ib, 1, 1)
+!~                         endif
+!~                     enddo
+                    
                 enddo
             enddo
 
@@ -398,6 +462,8 @@ print*, eff(1), eff(9)
             phi(1, 0, 0, ip, is_initial) = dist_theta(ip)
         enddo
 
+print*, 'get distribution', 1d0-(1d0-0.0823d0)
+
         ! successively compute distribution over ages
         do ij = 2, JJ
 
@@ -406,10 +472,10 @@ print*, eff(1), eff(9)
                 do ib = 0, NB
                     do ip = 1 , NP
                         do is = 1, NS
-
+                        
                             ! interpolate yesterday's savings decision
-                            call linint_Grow(kplus(ij-1, ik, ib, ip, is), k_l, k_u, k_grow, NK, ikl, ikr, varphik)
-                            call linint_Grow(bplus(ij-1, ik, ib, ip, is), b_l, b_u, b_grow, NB, ibl, ibr, varphib)
+                            call linint_Grow(kplus(ij, ik, ib, ip, is), k_l, k_u, k_grow, NK, ikl, ikr, varphik)
+                            call linint_Grow(bplus(ij, ik, ib, ip, is), b_l, b_u, b_grow, NB, ibl, ibr, varphib)
 
                             ! restrict values to grid just in case
                             ikl = min(ikl, NK)
@@ -418,6 +484,8 @@ print*, eff(1), eff(9)
                             ibr = min(ibr, NB)
                             varphik = min(varphik, 1d0)
                             varphib = min(varphib, 1d0)
+
+!~ print*, kplus(ij-1, ik, ib, ip, is), varphik, bplus(ij-1, ik, ib, ip, is), varphib
 
                             ! redistribute households
                             do is_p = 1, NS
@@ -429,13 +497,15 @@ print*, eff(1), eff(9)
                                                             pi(is, is_p)*(1d0-varphik)*varphib*phi(ij-1, ik, ib, ip, is)
                                 phi(ij, ikl, ibr, ip, is_p) = phi(ij, ikl, ibl, ip, is_p) + &
                                                             pi(is, is_p)*(1-varphik)*(1-varphib)*phi(ij-1, ik, ib, ip, is)
+!~                                 print*, 'phi', phi(ij, ikl, ibl, ip, is_p), phi(ij, ikl, ibr, ip, is_p), &
+!~                                 phi(ij, ikr, ibl, ip, is_p), phi(ij, ikl, ibr, ip, is_p)
                             enddo
                         enddo
                     enddo
                 enddo
             enddo
         enddo
-
+print*, 'End of get distribution'
     end subroutine
 
 
@@ -458,6 +528,8 @@ print*, eff(1), eff(9)
         b_coh(:) = 0d0
         v_coh(:) = 0d0
 
+print*, 'Aggregation1'
+
         do ij = 1, JJ
             do ik = 0, NK
                 do ib = 0, NB
@@ -467,6 +539,7 @@ print*, eff(1), eff(9)
                             l_coh(ij) = l_coh(ij) + l(ij, ik, ib, ip, is)*phi(ij, ik, ib, ip, is)
                             y_coh(ij) = y_coh(ij) + eff(ij)*theta(ip)*l(ij, ik, ib, ip, is)*phi(ij, ik, ib, ip, is)
                             k_coh(ij) = k_coh(ij) + k(ik)*phi(ij, ik, ib, ip, is)
+!~                             print*, k_coh(ij)
                             b_coh(ij) = b_coh(ij) + b(ib)*phi(ij, ik, ib, ip, is)
                             v_coh(ij) = v_coh(ij) + V(ij, ik, ib, ip, is)*phi(ij, ik, ib, ip, is)
                         enddo
@@ -474,6 +547,8 @@ print*, eff(1), eff(9)
                 enddo
             enddo
         enddo
+
+print*, 'Aggregation2'
 
         ! calculate aggregate quantities
         CC = 0d0
@@ -491,12 +566,19 @@ print*, eff(1), eff(9)
             if(ij < JR) workpop = workpop + m(ij)
         enddo
 
+print*, 'Aggregation3'
+
         ! damping and other quantities [damping acording to Gauss-Seidel procedure]
         KK = damp*(KK) + (1d0-damp)*KK_old !check this
+print*, 'KK =' , KK       
         BB = damp*(BB) + (1d0-damp)*BB_old !check this
+print*, 'BB =', BB        
         LL = damp*LL + (1d0-damp)*LL_old
+print*, 'LL =', LL        
         II = (n_p+delta)*KK
-        YY = Omega * KK**alpha * LL**(1d0-alpha)
+print*, 'II =', II    
+        YY = Omega * KK ** alpha * LL ** (1d0-alpha)
+print*, 'YY =', YY 
 
         ! get average income and average working hours
         INC = w*LL/workpop ! average labour earning
@@ -504,7 +586,7 @@ print*, eff(1), eff(9)
 
         ! get difference on goods market
         DIFF = YY-CC-II-GG
-
+print*, 'Aggregation5'
     end subroutine
 
 

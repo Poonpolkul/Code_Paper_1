@@ -35,7 +35,7 @@ module globals
 !~     integer, parameter :: NK = 100
     
     ! number of points on the risk-free asset grid
-    integer, parameter :: NB = 10
+    integer, parameter :: NB = 20
 !~     integer, parameter :: NB = 100
 
     ! household preference parameters 
@@ -64,12 +64,12 @@ module globals
 
     ! size of the risky asset grid
     real*8, parameter :: k_l    = 0.0d0
-    real*8, parameter :: k_u    = 35d0
+    real*8, parameter :: k_u    = 40d0
     real*8, parameter :: k_grow = 0.05d0
     
     ! size of the risk-free asset grid
-    real*8, parameter :: b_l    = 0.0d0
-    real*8, parameter :: b_u    = 35d0
+    real*8, parameter :: b_l    = 0d0
+    real*8, parameter :: b_u    = 40d0
     real*8, parameter :: b_grow = 0.05d0
 
     ! demographic parameters
@@ -148,6 +148,54 @@ contains
         -(1-tauw)*wage*l_in-varphi1*(abs(kplus(ij_com, ik_com, ib_com, ip_com, is_com)-k(ik_com)))**varphi2
         
     end function
+    
+!~     ! calculates implicit function for labour
+!~     function implicitlb(l_in)
+    
+!~         implicit none
+        
+!~         real*8, intent(in) :: l_in
+!~         real*8 :: lab_com, rk, bplus
+!~         real*8 :: implicitlb, wage
+        
+!~         ! calculate labour
+!~         lab_com = l_in
+!~         bplus = b_in
+ 
+!~         ! calculate the wage rate
+!~         wage = wn*eff(ij_com)*theta(ip_com)
+        
+!~         ! calculate implicit value of labour
+!~         implicitlb = ((1d0/phiu)*(1d0-l_in)**eta*(1d0-tauw)*wage)**(1/sigma) &
+!~         + bplus + kplus(ij_com, ik_com, ib_com, ip_com, is_com) &
+!~         - (1d0+rb)*b(ib_com) - ((1+(YY-wn*LL)/KK)-delta)*k(ik_com) &
+!~         -(1-tauw)*wage*l_in-varphi1*(abs(kplus(ij_com, ik_com, ib_com, ip_com, is_com)-k(ik_com)))**varphi2
+        
+!~     end function
+    
+!~     ! calculates implicit function for labour
+!~     function implicitlk(l_in)
+    
+!~         implicit none
+        
+!~         real*8, intent(in) :: l_in
+!~         real*8 :: lab_com, rk, kplus
+!~         real*8 :: implicitlk, wage
+        
+!~         ! calculate labour
+!~         lab_com = l_in
+!~         kplus = k_in
+ 
+!~         ! calculate the wage rate
+!~         wage = wn*eff(ij_com)*theta(ip_com)
+        
+!~         ! calculate implicit value of labour
+!~         implicitlk = ((1d0/phiu)*(1d0-l_in)**eta*(1d0-tauw)*wage)**(1/sigma) &
+!~         + bplus(ij_com, ik_com, ib_com, ip_com, is_com) + kplus &
+!~         - (1d0+rb)*b(ib_com) - ((1+(YY-wn*LL)/KK)-delta)*k(ik_com) &
+!~         -(1-tauw)*wage*l_in-varphi1*(abs(kplus-k(ik_com)))**varphi2
+        
+!~     end function
 
     ! calculated the first and second FOCs vary in k_plus (eq 20 & 21)
     function FOCK(k_in)
@@ -161,7 +209,6 @@ contains
 
         ! calculate tomorrows assets
         kplus = k_in
-        bplus = b_in
 
         ! calculate the wage rate
         wage = wn*eff(ij_com)*theta(ip_com)
@@ -178,6 +225,10 @@ contains
             lab_com = 0d0
         endif
 
+        if (lab_com < 0) then
+            lab_com = 0d0
+        end if
+        
         ! calculate consumption
         cons_com = max((available + (1-tauw)*wage*lab_com - kplus &
          - bplus(ij_com, ik_com, ib_com, ip_com, is_com)- varphi1*(abs(kplus-k(ik_com)))**varphi2), 1d-10)
@@ -191,12 +242,12 @@ contains
         ! calculate the first order condition for consumption
         fock = abs(cons_com**(-sigma) - tomorrow_k)
 
-        ! print for debug ***********************************************
-        if (ij_com < JR) then
-            print*,'ij=', ij_com, 'ik=', ik_com,'ib=', ib_com,'ip=', ip_com, &
-            'is=', is_com, 'wage=', wage, 'kplus=', kplus, 'cons_com=', &
-             cons_com, 'tomorrow_k=', tomorrow_k, 'fock=', fock
-        end if
+!~         ! print for debug ***********************************************
+!~         if (ij_com < JR) then
+!~             print*,'ij=', ij_com, 'ik=', ik_com,'ib=', ib_com,'ip=', ip_com, &
+!~             'is=', is_com, 'wage=', wage, 'kplus=', kplus, 'lab_com=', lab_com, 'cons_com=', &
+!~              cons_com, 'tomorrow_k=', tomorrow_k, 'fock=', fock, 'bplus =', bplus(ij_com, ik_com, ib_com, ip_com, is_com)
+!~         end if
         
       
     end function
@@ -212,7 +263,6 @@ contains
         logical :: check
 
         ! calculate tomorrows assets
-        kplus = k_in
         bplus = b_in
 
         wage = wn*eff(ij_com)*theta(ip_com)
@@ -228,7 +278,11 @@ contains
         else
             lab_com = 0d0
         endif
-        
+
+        if (lab_com < 0) then
+            lab_com = 0d0
+        end if
+
         ! calculate consumption
         cons_com = max((available + (1-tauw)*wage*lab_com - kplus(ij_com, ik_com, ib_com, ip_com, is_com)  & 
         - bplus - varphi1*(abs(kplus(ij_com, ik_com, ib_com, ip_com, is_com)-k(ik_com)))**varphi2) ,1d-10)
@@ -244,11 +298,11 @@ contains
         focb = abs(cons_com**(-sigma) - tomorrow_b)
         
         ! print for debug ***********************************************
-        if (ij_com < JR) then
-            print*,'ij=', ij_com, 'ik=', ik_com,'ib=', ib_com,'ip=', ip_com, &
-            'is=', is_com, 'wage=', wage, 'bplus=', bplus, 'cons_com=', &
-             cons_com, 'tomorrow_b=', tomorrow_b, 'focb=', focb 
-        end if
+!~         if (ij_com < JR) then
+!~             print*,'ij=', ij_com, 'ik=', ik_com,'ib=', ib_com,'ip=', ip_com, &
+!~             'is=', is_com, 'wage=', wage, 'bplus=', bplus, 'lab_com=', lab_com, 'cons_com=', &
+!~              cons_com, 'tomorrow_b=', tomorrow_b, 'focb=', focb, 'kplus =', kplus(ij_com, ik_com, ib_com, ip_com, is_com)
+!~         end if
 
     end function
     
