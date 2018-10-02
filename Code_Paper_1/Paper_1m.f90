@@ -55,7 +55,7 @@ module globals
     
     ! production parameters
     real*8, parameter :: alpha = 0.36d0
-    real*8, parameter :: delta = 1d0-(1d0-0.0823d0)
+    real*8, parameter :: delta = 1d0-(1d0-0.0823d0) !delta = 1d0-(1d0-0.0823d0)
     real*8, parameter :: Omega = 1.60d0 ! Need shock process
     
     ! aggregate risk process [just use parameter from Fehr's HH risk process. Need to adjust later]
@@ -109,8 +109,8 @@ module globals
     real*8 :: eff(JJ)
 
     ! individual variables
-    real*8 :: k(0:NK), kplus(JJ, 0:NK, 0:NB, NP, NS)
-    real*8 :: b(0:NB), bplus(JJ, 0:NK, 0:NB, NP, NS)
+    real*8 :: k(0:NK), kplus(JJ, 0:NK, 0:NB, NP, NS), kplus_opt
+    real*8 :: b(0:NB), bplus(JJ, 0:NK, 0:NB, NP, NS), bplus_opt
     real*8 :: c(JJ, 0:NK, 0:NB, NP, NS), l(JJ, 0:NK, 0:NB, NP, NS)
     real*8 :: phi(JJ, 0:NK, 0:NB, NP, NS), V(JJ, 0:NK, 0:NB, NP, NS) = 0d0
 
@@ -125,6 +125,48 @@ module globals
     real*8 :: cons_com, lab_com, DIFF, INC_init
 
 contains
+
+    Subroutine bisection(f,x1,x2,eps,Root,check)
+
+        implicit none
+        real*8 :: f, x1, x2, eps, Root
+        real*8 :: a, b, c
+        integer :: i
+        logical :: check
+        integer, parameter:: iter=200
+        
+        !* check the bisection condition
+        if(f(x1)*f(x2)>0.0) then
+          check = .false.
+          return
+        end if
+
+        !* initialize calculations
+        a=x1
+        b=x2
+
+        !* Iterative refining the solution 
+        do i=1,iter
+!~         print *, i
+          c=(b+a)/2.0
+          if(f(a)*f(c).le.0.0) then
+              b = c
+            else
+              a=c
+          end if
+        ! condition(s) to stop iterations)
+          if(abs(b-a)<= eps) exit  
+        end do
+        Root=(b+a)/2.0
+
+        !* check if it is a root or singularity
+        if (abs(f(Root)) < 1.0) then
+          check = .true.
+          else
+          check = .false.
+        end if
+
+    end subroutine bisection
 
     ! calculates implicit function for labour
     function implicitl(l_in)
@@ -143,73 +185,30 @@ contains
         
         ! calculate implicit value of labour
         implicitl = ((1d0/phiu)*(1d0-l_in)**eta*(1d0-tauw)*wage)**(1/sigma) &
-        + bplus(ij_com, ik_com, ib_com, ip_com, is_com)+kplus(ij_com, ik_com, ib_com, ip_com, is_com) &
+        + bplus_opt+kplus_opt &
         - (1d0+rb)*b(ib_com) - ((1+(YY-wn*LL)/KK)-delta)*k(ik_com) &
-        -(1-tauw)*wage*l_in-varphi1*(abs(kplus(ij_com, ik_com, ib_com, ip_com, is_com)-k(ik_com)))**varphi2
+        -(1-tauw)*wage*l_in-varphi1*(abs(kplus_opt-k(ik_com)))**varphi2
         
     end function
-    
-!~     ! calculates implicit function for labour
-!~     function implicitlb(l_in)
-    
-!~         implicit none
-        
-!~         real*8, intent(in) :: l_in
-!~         real*8 :: lab_com, rk, bplus
-!~         real*8 :: implicitlb, wage
-        
-!~         ! calculate labour
-!~         lab_com = l_in
-!~         bplus = b_in
- 
-!~         ! calculate the wage rate
-!~         wage = wn*eff(ij_com)*theta(ip_com)
-        
-!~         ! calculate implicit value of labour
-!~         implicitlb = ((1d0/phiu)*(1d0-l_in)**eta*(1d0-tauw)*wage)**(1/sigma) &
-!~         + bplus + kplus(ij_com, ik_com, ib_com, ip_com, is_com) &
-!~         - (1d0+rb)*b(ib_com) - ((1+(YY-wn*LL)/KK)-delta)*k(ik_com) &
-!~         -(1-tauw)*wage*l_in-varphi1*(abs(kplus(ij_com, ik_com, ib_com, ip_com, is_com)-k(ik_com)))**varphi2
-        
-!~     end function
-    
-!~     ! calculates implicit function for labour
-!~     function implicitlk(l_in)
-    
-!~         implicit none
-        
-!~         real*8, intent(in) :: l_in
-!~         real*8 :: lab_com, rk, kplus
-!~         real*8 :: implicitlk, wage
-        
-!~         ! calculate labour
-!~         lab_com = l_in
-!~         kplus = k_in
- 
-!~         ! calculate the wage rate
-!~         wage = wn*eff(ij_com)*theta(ip_com)
-        
-!~         ! calculate implicit value of labour
-!~         implicitlk = ((1d0/phiu)*(1d0-l_in)**eta*(1d0-tauw)*wage)**(1/sigma) &
-!~         + bplus(ij_com, ik_com, ib_com, ip_com, is_com) + kplus &
-!~         - (1d0+rb)*b(ib_com) - ((1+(YY-wn*LL)/KK)-delta)*k(ik_com) &
-!~         -(1-tauw)*wage*l_in-varphi1*(abs(kplus-k(ik_com)))**varphi2
-        
-!~     end function
 
-    ! calculated the first and second FOCs vary in k_plus (eq 20 & 21)
-    function FOCK(k_in)
-    
+
+    function FOC(a_in)
+        
         implicit none
-        real*8, intent(in) :: k_in
-        real*8 :: fock, kplus, l_in, varphi, tomorrow_k, wage
-        real*8 :: available
-        integer :: ikl, ikr
+        real*8, intent(in) :: a_in(:)
+        real*8 :: foc(size(a_in,1))
+        real*8 :: focb, fock, l_in, varphik, varphib
+        real*8 :: tomorrow_k, tomorrow_b, wage
+        real*8 :: x1, x2, available, eps, Root
+        integer :: ikl, ikr, ibl, ibr
         logical :: check
-
-        ! calculate tomorrows assets
-        kplus = k_in
-
+        
+        kplus_opt = a_in(1)
+        bplus_opt = a_in(2)
+        
+        !initialize root value
+        root = 1d0
+        
         ! calculate the wage rate
         wage = wn*eff(ij_com)*theta(ip_com)
 
@@ -217,95 +216,36 @@ contains
         available = ((1+(YY-wn*LL)/KK)-delta)*k(ik_com) + (1d0+rbn)*b(ib_com) + pen(ij_com)
 
         ! determine labour
+        x1=0d0
+        x2=1d0
+        eps=1.0e-6
         if (ij_com < JR) then
-            ! solve lab_com from the implicit FOC using root finding
-            call fzero(l_in, implicitl, check)
-            lab_com = l_in
+            call bisection(implicitl, x1, x2, eps, Root, check)
+            lab_com = Root
+!~             print*, kplus_opt, bplus_opt, root
         else
             lab_com = 0d0
         endif
-
-        if (lab_com < 0) then
-            lab_com = 0d0
-        end if
         
         ! calculate consumption
-        cons_com = max((available + (1-tauw)*wage*lab_com - kplus &
-         - bplus(ij_com, ik_com, ib_com, ip_com, is_com)- varphi1*(abs(kplus-k(ik_com)))**varphi2), 1d-10)
+        cons_com = max((available + (1-tauw)*wage*lab_com - kplus_opt  & 
+        - bplus_opt - varphi1*(abs(kplus_opt-k(ik_com)))**varphi2) ,1d-10)
 
         ! calculate linear interpolation for future part of first order condition
-        call linint_Grow(kplus, k_l, k_u, k_grow, NK, ikl, ikr, varphi)
-
-        tomorrow_k = varphi*RHS_k(ij_com+1, ikl, ib_com, ip_com, is_com) + &
-                  (1d0-varphi)*RHS_k(ij_com+1, ikr, ib_com,  ip_com, is_com) 
-
-        ! calculate the first order condition for consumption
-        fock = abs(cons_com**(-sigma) - tomorrow_k)
-
-!~         ! print for debug ***********************************************
-!~         if (ij_com < JR) then
-!~             print*,'ij=', ij_com, 'ik=', ik_com,'ib=', ib_com,'ip=', ip_com, &
-!~             'is=', is_com, 'wage=', wage, 'kplus=', kplus, 'lab_com=', lab_com, 'cons_com=', &
-!~              cons_com, 'tomorrow_k=', tomorrow_k, 'fock=', fock, 'bplus =', bplus(ij_com, ik_com, ib_com, ip_com, is_com)
-!~         end if
+        call linint_Grow(kplus_opt, k_l, k_u, k_grow, NK, ikl, ikr, varphik)
+        call linint_Grow(bplus_opt, b_l, b_u, b_grow, NB, ibl, ibr, varphib)
         
-      
-    end function
-    
-    ! calculated the first and second FOCs vary in bplus (eq 20 & 21)
-    function FOCB(b_in)
-    
-        implicit none
-        real*8, intent(in) :: b_in
-        real*8 :: focb, l_in, bplus, varphi, tomorrow_b, wage
-        real*8 :: available
-        integer :: ibl, ibr
-        logical :: check
-
-        ! calculate tomorrows assets
-        bplus = b_in
-
-        wage = wn*eff(ij_com)*theta(ip_com)
+        tomorrow_k = varphik*RHS_k(ij_com+1, ikl, ib_com, ip_com, is_com) + &
+        (1d0-varphik)*RHS_k(ij_com+1, ikr, ib_com,  ip_com, is_com) 
         
-        ! calculate available resources
-        available = ((1+(YY-wn*LL)/KK)-delta)*k(ik_com) + (1d0+rbn)*b(ib_com) + pen(ij_com)
+        tomorrow_b = varphib*RHS_b(ij_com+1, ik_com, ibl, ip_com, is_com) + &
+        (1d0-varphib)*RHS_b(ij_com+1, ik_com, ibr, ip_com, is_com)
 
-        ! determine labour
-        if (ij_com < JR) then
-            ! solve lab_com from the implicit FOC using root finding
-            call fzero(l_in, implicitl, check)
-            lab_com = l_in
-        else
-            lab_com = 0d0
-        endif
-
-        if (lab_com < 0) then
-            lab_com = 0d0
-        end if
-
-        ! calculate consumption
-        cons_com = max((available + (1-tauw)*wage*lab_com - kplus(ij_com, ik_com, ib_com, ip_com, is_com)  & 
-        - bplus - varphi1*(abs(kplus(ij_com, ik_com, ib_com, ip_com, is_com)-k(ik_com)))**varphi2) ,1d-10)
-
-        ! calculate linear interpolation for future part of first order condition
-        call linint_Grow(bplus, b_l, b_u, b_grow, NB, ibl, ibr, varphi)
-
-        tomorrow_b = varphi*RHS_b(ij_com+1, ik_com, ibl, ip_com, is_com) + &
-                  (1d0-varphi)*RHS_b(ij_com+1, ik_com, ibr, ip_com, is_com)
-
-
-        ! calculate the first order condition for consumption
-        focb = abs(cons_com**(-sigma) - tomorrow_b)
-        
-        ! print for debug ***********************************************
-!~         if (ij_com < JR) then
-!~             print*,'ij=', ij_com, 'ik=', ik_com,'ib=', ib_com,'ip=', ip_com, &
-!~             'is=', is_com, 'wage=', wage, 'bplus=', bplus, 'lab_com=', lab_com, 'cons_com=', &
-!~              cons_com, 'tomorrow_b=', tomorrow_b, 'focb=', focb, 'kplus =', kplus(ij_com, ik_com, ib_com, ip_com, is_com)
-!~         end if
+        ! calculate the first order conditions for consumption
+        foc(1) = abs(cons_com**(-sigma) - tomorrow_k)
+        foc(2) = abs(cons_com**(-sigma) - tomorrow_b)
 
     end function
-    
 
     ! calculates the value function
     function valuefunc(kplus, bplus, cons, lab, ij, ip, is)

@@ -14,7 +14,7 @@
 !     Fehr, H. & Kindermann, F. (2018). Introduction to Computational
 !         Economics using Fortran. Oxford: Oxford University Press.
 !
-! #VC# VERSION: 1.0  (23 January 2018)
+! #VC# VERSION: 1.1  (18 June 2018)
 !
 !##############################################################################
 !##############################################################################
@@ -99,7 +99,7 @@ public :: normal_discrete
 public :: log_normal_discrete
 
 ! discretization of AR(1) process
-public :: discretize_AR
+public :: discretize_AR, discretize_log_AR
 
 ! probabilities and distributions
 public :: uniformPDF, uniformCDF, uniformCDF_Inv
@@ -159,18 +159,6 @@ interface assert_eq
 
     module procedure assert_eq2, assert_eq3, assert_eq4, assert_eq5, &
         assert_eqn
-
-end interface
-
-
-!##############################################################################
-! INTERFACE mat_mult
-!
-! Multiplies up to 6 matrices.
-!##############################################################################
-interface mat_mult
-
-    module procedure mat_mult2, mat_mult3, mat_mult4, mat_mult5, mat_mult6
 
 end interface
 
@@ -1890,82 +1878,6 @@ contains
         linint_Gen = phi*yi(ial) + (1d0-phi)*yi(iar)
 
     end function
-    
-    
-    !##############################################################################
-    ! subroutine linint_Gen_New
-    !
-    ! For linear interpolation on irregular grids.
-    !##############################################################################
-    subroutine linint_Gen_New(x, grid, istart_in, il, ir, phi)
-
-        
-        !##### INPUT/OUTPUT VARIABLES #############################################
-
-        ! point where to evaluate
-        real*8, intent(in) :: x
-
-        ! grid on which to evaluate
-        real*8, intent(in) :: grid(0:)
-        
-        ! (optional) point where to start
-        integer, intent(in), optional :: istart_in
-
-        ! left interpolation point
-        integer, intent(out) :: il
-        
-        ! right interpolation point
-        integer, intent(out) :: ir
-
-        ! interpolation fraction
-        real*8, intent(out) :: phi
-
-        
-        !##### OTHER VARIABLES ####################################################
-
-        ! other variables
-        integer :: n, istart
-
-
-        !##### ROUTINE CODE #######################################################
-
-        n = size(grid,1)-1
-
-        if(present(istart_in))then
-            istart = min(max(istart_in, 0), n)
-        else
-            istart = n/2
-        endif
-        
-        ! if grid value too large, search for first smaller point
-        if(grid(istart) > x)then
-            il = istart
-            do 
-                il = il - 1
-                if(il <= 0)exit
-                if(grid(il) <= x)exit
-            enddo
-            il = max(il, 0)
-            il = min(il, n-1)            
-            ir = il+1
-
-        ! if grid value too small, search for first larger point
-        else
-            ir = istart
-            do 
-                ir = ir + 1
-                if(ir >= n)exit
-                if(grid(ir) >= x)exit
-            enddo
-            ir = max(ir, 1)
-            ir = min(ir, n)            
-            il = ir-1
-        endif
-
-        ! linearly interpolate between the two points
-        phi = 1d0 - (x-grid(il))/(grid(ir)-grid(il))
-
-    end subroutine
 
 
 
@@ -1977,202 +1889,6 @@ contains
 !
 !##############################################################################
 !##############################################################################
-    
-    
-    !##############################################################################
-    ! FUNCTION mat_mult2
-    !
-    ! Multiplies two matrices a*b.
-    !##############################################################################
-    function mat_mult2(a, b) result(mat)
-    
-    
-        !##### INPUT/OUTPUT VARIABLES #############################################
-        
-        ! matrix number one
-        real*8, intent(in) :: a(:, :)
-        
-        ! matrix number two
-        real*8, intent(in) :: b(:, :)
-        
-        ! the result
-        real*8 :: mat(size(a, 1), size(b, 2))
-        
-        
-        !##### OTHER VARIABLES ####################################################
-        
-        integer :: j, k, n
-        
-        
-        !##### ROUTINE CODE #######################################################
-        
-        ! assert equality of dimensions
-        n = assert_eq(size(a, 2), size(b, 1), 'mat_mult')
-        n = n
-        
-        ! sucessively multiply rows and columns
-        do j = 1, size(a,1)
-            do k = 1, size(b, 2)
-                mat(j, k) = sum(a(j, :)*b(:, k))
-            enddo
-        enddo
-    
-    end function mat_mult2
-    
-    
-    !##############################################################################
-    ! FUNCTION mat_mult3
-    !
-    ! Multiplies three matrices a*b*c.
-    !##############################################################################
-    function mat_mult3(a, b, c) result(mat)
-    
-    
-        !##### INPUT/OUTPUT VARIABLES #############################################
-        
-        ! matrix number one
-        real*8, intent(in) :: a(:, :)
-        
-        ! matrix number two
-        real*8, intent(in) :: b(:, :)
-        
-        ! matrix number three
-        real*8, intent(in) :: c(:, :)
-        
-        ! the result
-        real*8 :: mat(size(a, 1), size(c, 2))
-        
-        
-        !##### OTHER VARIABLES ####################################################
-        
-        
-        !##### ROUTINE CODE #######################################################
-        
-        ! sucessively multiply rows and columns
-        mat = mat_mult2(a, mat_mult2(b, c))
-    
-    end function mat_mult3
-    
-    
-    !##############################################################################
-    ! FUNCTION mat_mult4
-    !
-    ! Multiplies four matrices a*b*c*d.
-    !##############################################################################
-    function mat_mult4(a, b, c, d) result(mat)
-    
-    
-        !##### INPUT/OUTPUT VARIABLES #############################################
-        
-        ! matrix number one
-        real*8, intent(in) :: a(:, :)
-        
-        ! matrix number two
-        real*8, intent(in) :: b(:, :)
-        
-        ! matrix number three
-        real*8, intent(in) :: c(:, :)
-        
-        ! matrix number four
-        real*8, intent(in) :: d(:, :)
-        
-        ! the result
-        real*8 :: mat(size(a, 1), size(d, 2))
-        
-        
-        !##### OTHER VARIABLES ####################################################
-        
-        
-        !##### ROUTINE CODE #######################################################
-        
-        ! sucessively multiply rows and columns
-        mat = mat_mult2(a, mat_mult3(b, c, d))
-    
-    end function mat_mult4
-    
-    
-    !##############################################################################
-    ! FUNCTION mat_mult5
-    !
-    ! Multiplies four matrices a*b*c*d*e.
-    !##############################################################################
-    function mat_mult5(a, b, c, d, e) result(mat)
-    
-    
-        !##### INPUT/OUTPUT VARIABLES #############################################
-        
-        ! matrix number one
-        real*8, intent(in) :: a(:, :)
-        
-        ! matrix number two
-        real*8, intent(in) :: b(:, :)
-        
-        ! matrix number three
-        real*8, intent(in) :: c(:, :)
-        
-        ! matrix number four
-        real*8, intent(in) :: d(:, :)
-        
-        ! matrix number five
-        real*8, intent(in) :: e(:, :)
-        
-        ! the result
-        real*8 :: mat(size(a, 1), size(e, 2))
-        
-        
-        !##### OTHER VARIABLES ####################################################
-        
-        
-        !##### ROUTINE CODE #######################################################
-        
-        ! sucessively multiply rows and columns
-        mat = mat_mult2(a, mat_mult4(b, c, d, e))
-    
-    end function mat_mult5
-    
-    
-    !##############################################################################
-    ! FUNCTION mat_mult6
-    !
-    ! Multiplies four matrices a*b*c*d*e*f.
-    !##############################################################################
-    function mat_mult6(a, b, c, d, e, f) result(mat)
-    
-    
-        !##### INPUT/OUTPUT VARIABLES #############################################
-        
-        ! matrix number one
-        real*8, intent(in) :: a(:, :)
-        
-        ! matrix number two
-        real*8, intent(in) :: b(:, :)
-        
-        ! matrix number three
-        real*8, intent(in) :: c(:, :)
-        
-        ! matrix number four
-        real*8, intent(in) :: d(:, :)
-        
-        ! matrix number five
-        real*8, intent(in) :: e(:, :)
-        
-        ! matrix number six
-        real*8, intent(in) :: f(:, :)
-        
-        ! the result
-        real*8 :: mat(size(a, 1), size(f, 2))
-        
-        
-        !##### OTHER VARIABLES ####################################################
-        
-        
-        !##### ROUTINE CODE #######################################################
-        
-        ! sucessively multiply rows and columns
-        mat = mat_mult2(a, mat_mult5(b, c, d, e, f))
-    
-    end function mat_mult6
-    
     
     
     !##############################################################################
@@ -5224,7 +4940,7 @@ contains
      
         !##### OTHER VARIABLES ####################################################
      
-        real*8 :: mu_c, sigma_c, pim4, z, z1, p1, p2, p3, pp
+        real*8 :: mu_c, sigma_c, pim4, z=0d0, z1, p1, p2, p3, pp
         integer :: n, m, i, j, its
         integer, parameter :: maxit = 200
         real*8, parameter :: pi = 3.1415926535897932d0
@@ -5815,8 +5531,8 @@ contains
         real*8 :: tol
         real*8, parameter :: cgold = 0.3819660d0
         real*8, parameter :: zeps = 1.0e-3*epsilon(xmin)
-        real*8 :: a, b, d, e, etemp, fu, fv, fw, fx, p, q, r, tol1, tol2, &
-        u, v, w, x, xm, ax, bx, cx
+        real*8 :: a=0d0, b=0d0, d=0d0, e=0d0, etemp, fu, fv, fw, fx, p, q, r, tol1, tol2, &
+            u, v, w, x, xm, ax, bx, cx
         integer :: iter
         
         
@@ -6328,7 +6044,8 @@ contains
             real*8, parameter :: cgold = 0.3819660d0
             real*8, parameter :: zeps=1.0e-3*epsilon(ax)
             integer :: iter
-            real*8 :: a, b, d, e, etemp, fu, fv, fw, fx, p, q, r, tol1, tol2, &
+            real*8 :: a=0d0, b=0d0, d=0d0, e=0d0, etemp=0d0
+            real*8 :: fu, fv, fw, fx, p, q, r, tol1, tol2, &
                 u, v, w, x, xm
      
      
@@ -7365,7 +7082,7 @@ contains
             real*8, parameter :: alf = 1.0e-4
             real*8, parameter :: tolx = epsilon(x)
             integer :: ndum
-            real*8 :: a, alam, alam2, alamin, b, disc, f2, pabs, rhs1, rhs2, &
+            real*8 :: a, alam, alam2=0d0, alamin, b, disc, f2=0d0, pabs, rhs1, rhs2, &
                 slope, tmplam
      
      
@@ -11803,6 +11520,7 @@ contains
             !##### ROUTINE CODE #######################################################
             
             IImd = Int((IIleft+IIright)/2)
+            IIpv = IImd
             XXcp(1) = XX(IIleft)
             XXcp(2) = XX(IImd)
             XXcp(3) = XX(IIright)
@@ -12097,6 +11815,7 @@ contains
             !##### ROUTINE CODE #######################################################
             
             IImd = Int((IIleft+IIright)/2)
+            IIpv = IImd
             XXcp(1) = XX(IIleft)
             XXcp(2) = XX(IImd)
             XXcp(3) = XX(IIright)
@@ -12438,6 +12157,7 @@ contains
             !##### ROUTINE CODE #######################################################
             
             IImd = Int((IIleft+IIright)/2)
+            IIpv = IImd
             XXcp(1) = XX(IIleft)
             XXcp(2) = XX(IImd)
             XXcp(3) = XX(IIright)
@@ -12732,6 +12452,7 @@ contains
             !##### ROUTINE CODE #######################################################
             
             IImd = Int((IIleft+IIright)/2)
+            IIpv = IImd
             XXcp(1) = XX(IIleft)
             XXcp(2) = XX(IImd)
             XXcp(3) = XX(IIright)

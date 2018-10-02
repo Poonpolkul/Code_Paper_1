@@ -80,7 +80,7 @@ contains
                                        rb, rk, w, DIFF/YY*100d0
             if(abs(DIFF/YY)*100d0 < sig)then
                 call toc
-!~                 call output()
+                call output()
                 return
             endif
         enddo
@@ -127,18 +127,6 @@ contains
         enddo
 
         ! initialize age earnings process
-!~      ! initialize by calling eff value from HM's ef.txt
-!~         open(11,file='ef20.txt') ! average from ef.txt
-
-!~         do i = 1, JR
-!~             read(11,*) eff(i)
-!~             print*, eff(i), i
-!~         end do
-!~         close(11)
-
-!~         do i = JR+1, JJ
-!~             eff(:) = 0d0
-!~         end do
         eff(1) = 1.0000d0
         eff(2) = 1.3527d0
         eff(3) = 1.6952d0
@@ -149,21 +137,7 @@ contains
         eff(8) = 1.9392d0
         eff(9) = 1.9007d0
         eff(JR:JJ) = 0d0
-        
-!~      ! initilize using average value from HM
-!~         eff(1) = 0.798d0
-!~         eff(2) = 0.9878575d0
-!~         eff(3) = 1.1671425d0
-!~         eff(4) = 1.235d0
-!~         eff(5) = 1.275d0
-!~         eff(6) = 1.3105d0
-!~         eff(7) = 1.3385d0
-!~         eff(8) = 1.3625d0
-!~         eff(9) = 1.3385d0
-!~         eff(10) = 1.3025d0
-!~         eff(JR+1:JJ) = 0d0
 
-print*, eff(1), eff(9)
         ! initialize fixed effect
         dist_theta = 1d0/dble(NP)
         theta(1)   = -sqrt(sigma_theta)
@@ -208,7 +182,7 @@ print*, eff(1), eff(9)
         implicit none
 
         rk = Omega*alpha*(KK/LL)**(alpha-1d0)-delta !  ???
-        rb = rk-delta !  ???
+        rb = rk-delta 
         w = Omega*(1d0-alpha)*(KK/LL)**alpha
         rkn = rk*(1d0-taurk)
         rbn = rb*(1d0-taurb)
@@ -224,6 +198,7 @@ print*, eff(1), eff(9)
         implicit none
         integer :: ij, ik, ib, ip, ip_max, is, is_max
         real*8 :: k_in, b_in, wage, available
+        real*8 :: a_in(2)
         logical :: check
         
         ! get decision in the last period of life
@@ -268,8 +243,10 @@ print*, eff(1), eff(9)
                     do ip = 1, ip_max
                         do is = 1, is_max
                             ! get initial guess for the individual choices
-                            k_in = kplus(ij+1, ik, ib, ip, is)
-                            b_in = bplus(ij+1, ik, ib, ip, is)
+                            k_in = kplus(ij, ik, ib, ip, is) ! initial guess using value from the next period's kplus in the same states
+                            b_in = bplus(ij, ik, ib, ip, is)
+                            
+                            a_in(:) = (/k_in, b_in/)
                             
                             ! set up communication variables
                             ij_com = ij
@@ -277,16 +254,10 @@ print*, eff(1), eff(9)
                             ib_com = ib
                             ip_com = ip
                             is_com = is
-!~ print*, ij, ik, ib, ip, is, 'kplus =', kplus(ij, ik, ib, ip, is), 'bplus =', bplus(ij, ik, ib, ip, is),&
-!~  'kplus1 =', kplus(ij+1, ik, ib, ip, is), 'bplus1 =', bplus(ij+1, ik, ib, ip, is)                            
-                            ! solve the household problem using rootfinding
-                            call fzero(b_in, focb, check)
-                            
-!~                             if check then
-!~                                 b_in = 0d0
-!~                             end if
 
-                            call fzero(k_in, fock, check)
+                            call fzero(a_in, foc, check)
+!~                             call fzero(b_in, focb, check)
+!~                             call fzero(k_in, fock, check)
                             
                             ! write screen output in case of a problem
                             if(check)write(*,'(a, 5i4)')'ERROR IN ROOTFINDING : ', ij, ik, ib, ip, is
@@ -306,13 +277,9 @@ print*, eff(1), eff(9)
 !~                                 cons_com = max( (available + wage*lab_com)/p , 1d-10)
                             endif
 
-!~ print*, ij, ik, ib, ip, is, 'k_in =', k_in, 'b_in =', b_in, 'l_com =', lab_com    
-
                             ! copy decisions
                             kplus(ij, ik, ib, ip, is) = k_in
-                            
-!~ print*, 'kplus =', kplus(ij, ik, ib, ip, is)
-                            
+                                                        
                             bplus(ij, ik, ib, ip, is) = b_in
                             c(ij, ik, ib, ip, is) = cons_com
                             l(ij, ik, ib, ip, is) = lab_com
@@ -327,44 +294,6 @@ print*, eff(1), eff(9)
                             V(ij, ik, ib, :, :) = V(ij, ik, ib, 1, 1)
                         endif
                     enddo
-                    
-!~                     do ip = 1, ip_max
-!~                         do is = 1, is_max
-!~                             ! get initial guess for the individual choices
-!~                             k_in = kplus(ij, ik, ib, ip, is)
-!~                             b_in = bplus(ij, ik, ib, ip, is)
-                            
-!~                             ! set up communication variables
-!~                             ij_com = ij
-!~                             ik_com = ik
-!~                             ib_com = ib
-!~                             ip_com = ip
-!~                             is_com = is
-!~ print*, 'Hello', kplus(ij, ik, ib, ip, is), bplus(ij, ik, ib, ip, is)                            
-!~                             ! solve the household problem using rootfinding
-!~                             call fzero(b_in, focb, check)
-!~                             call fzero(k_in, fock, check)
-                                                        
-!~                             ! write screen output in case of a problem
-!~                             if(check)write(*,'(a, 5i4)')'ERROR IN ROOTFINDING : ', ij, ik, ib, ip, is
-   
-!~                             ! copy decisions
-!~                             kplus(ij, ik, ib, ip, is) = k_in
-!~                             bplus(ij, ik, ib, ip, is) = b_in
-!~                             c(ij, ik, ib, ip, is) = cons_com
-!~                             l(ij, ik, ib, ip, is) = lab_com
-!~                             V(ij, ik, ib, ip, is) = valuefunc(k_in, b_in, cons_com, lab_com, ij, ip, is)
-!~                         enddo
-!~                         ! copy decision in retirement age
-!~                         if(ij >= JR)then
-!~                             kplus(ij, ik, ib, :, :) = kplus(ij, ik, ib, 1, 1)
-!~                             bplus(ij, ik, ib, :, :) = bplus(ij, ik, ib, 1, 1)
-!~                             c(ij, ik, ib, :, :) = c(ij, ik, ib, 1, 1)
-!~                             l(ij, ik, ib, :, :) = l(ij, ik, ib, 1, 1)
-!~                             V(ij, ik, ib, :, :) = V(ij, ik, ib, 1, 1)
-!~                         endif
-!~                     enddo
-                    
                 enddo
             enddo
 
