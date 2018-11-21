@@ -50,6 +50,9 @@ contains
             ! aggregate individual decisions over cohorts
             call aggregation()
 
+            ! update bond market return
+            call bond_return()
+
             ! determine the government parameters
             call government()
 
@@ -81,8 +84,7 @@ contains
 
         ! set up population structure
         do ij = 1, JJ
-            m(ij) = (1d0+n_p)**(1d0-ij) 
-            ! m = relative population share to cohort age ij=1 (see P506) 
+            m(ij) = (1d0+n_p)**(1d0-ij)  
         enddo
 
         ! set survival probabilities
@@ -120,29 +122,24 @@ contains
         call normal_discrete(zeta, dist_zeta, 0d0, sigma_zeta)
         zeta = exp(zeta)
 
-        ! discretize vtheta shocks
-        call normal_discrete(vtheta, dist_vtheta, 0d0, sigma_vtheta)
-        vtheta = exp(vtheta)
+        ! calculate the shock process for aggregate productivity (Omega)
+        call discretize_AR(rho, Omega_bar, sigma_vtheta, Omega, pi_Omega)
+        Omega = exp(Omega) ! Do we need exp()????
 
         ! calculate the shock process for eta
-        call discretize_AR(rho, 0d0, sigma_eta, eta, pi)
+        call discretize_AR(rho, 0d0, sigma_eps, eta, pi_eta)
         eta = exp(eta)
 
         ! initialize asset grid
         call grid_Cons_Grow(a, a_l, a_u, a_grow)
         call grid_Cons_Grow(omega, omega_l, omega_u, omega_grow)
-
-        ! discretize Omega
-        do iv = 1, NR
-            Omega(iv) = Omega_bar*exp(vtheta(iv))
-        enddo
         
-        ! tax and transfers
+        ! initialize tax and transfers
         tauw  = 0.0d0
 
         ! initial guesses for macro variables
         KK = 1d0
-        BB = 0d0 ! because of the bond market clearing condition ?
+        BB = 0d0
         LL = 1d0
         YY = 1d0
         II = (n_p+delta)*KK
@@ -168,32 +165,30 @@ contains
             do iv = 1, NR
                 rb = rb + (rk(iv)-delta)/NR
             enddo
-        else 
-            rb = !???????????
+        endif
         
         ! calculate wage rate
         do iv = 1, NR
             w(iv) = Omega(iv)*(1d0-alpha)*(KK/LL)**alpha
         enddo
         
+        ! calculate after-tax wage rate
         do iv = 1, NR
             wn(iv) = w(iv)*(1d0-tauw)
         enddo
         
         ! old-age transfers
-        pen = 0d0
+        pen(:,:) = 0d0
         do iv = 1, NR
             pen(JR:JJ, iv) = kappa*w(iv)*eff(JR-1)
         enddo
         
-        p = 1d0 + tauc !Do we need this???????
-
         ! endogenous lower bound for asset
         do ij = 1, JJ
             ! calculate natural borrowing limit
             abor_temp = 0d0
             do ijj = JJ, ij+1, -1
-                abor_temp = abor_temp/(1d0+rb) + (1-tau)*w(1)*eff(ijj) &
+                abor_temp = abor_temp/(1d0+rb) + wn(1)*eff(ijj) &
                             *exp(eta(1) + zeta(1))+ pen(ijj, 1)
             enddo
                                 
@@ -208,21 +203,25 @@ contains
     subroutine solve_household()
 
         implicit none
-        integer :: ij, ik, ib, ip, ip_max, is, is_max
+        integer :: ij, ik, ib, ip, 
         real*8 :: k_in, b_in, wage, available
         real*8 :: a_in(2)
         logical :: check
         
         ! get decision in the last period of life
-        do ia = 0, NA
-            do io = 0, NO
-                do iv = 0, NR
-                    a_plus(JJ, ia, io, 1, iv, 1) = 0d0
-                    omega_plus(JJ, ia, iv) = 0d0
-                    c(JJ, ia, io, 1, iv, 1) = (1d0 + rb + omega(io)*(rk(iv)-rb))*a(ia) &
-                    + pen(JJ, iv)
-                    V(JJ, ia, io, 1, iv, 1) = valuefunc(0d0, c(JJ, ia, io, 1, iv, 1), JJ, 1)
-                                    enddo
+        do ia = 1, NA
+            do io = 1, NO
+                do iq = 1, 1
+                    do ig = 1, 1
+                        do iv = 1, NR
+                            a_plus(JJ, ia, io, iq, ig, iv) = 0d0
+                            omega_plus(JJ, ia, iv) = 0d0
+                            c(JJ, ia, io, iq, ig, iv) = (1d0 + rb + omega(io)*(rk(iv)-rb))*a(ia) &
+                            + pen(JJ, iv)
+                            V(JJ, ia, io, iq, ig, iv) = valuefunc(0d0, c(JJ, ia, io, iq, ig, iv), JJ, iq)
+                        enddo
+                    enddo                
+                enddo
             enddo
         enddo
        
@@ -232,28 +231,32 @@ contains
             ! determine optimal portfolio choice for all others
             do ia = 1, NA
                 do iq = 1, NE
-                    ! assign omega = 0 for asset <= 0 (borrow from bond)
-                    if (a(ia) <= 0) then
-                        omega_plus(ij, ia, iq) = 0.0d0
-                    ! solve for 0 < omega <= 1
-                    else
-                        call solve_portfolio(ij, ia, iq)
+                    do iv = 1, NR
+                        ! assign omega = 0 for asset <= 0 (borrow from bond)
+                        if (a(ia) <= 0) then
+                            omega_plus(ij, ia, iq, iv) = 0.0d0
+                        ! solve for 0 < omega <= 1
+                        else
+                            call solve_portfolio(ij, ia, iq, iv)
+                    enddo
                 enddo
             enddo
 
             ! interpolate individual RHS and value function
             do iq = 1, NE
-                call interpolate(ij)
+                do iv = 1, NR
+                    call interpolate(ij, iq, iv)
+                enddo
             enddo
 
 
             ! determine consumption-savings solution
             do ia = 0, NA
                 do io = 0, NO
-                    do ig = 0, NW
-                        do iv = 0, NR
-                            do iq = 0, NE
-                                call solve_consumption(ij, ia, io, ig, iv, iq)
+                    do iq = 0, NE
+                        do ig = 0, NW
+                            do iv = 0, NR
+                                call solve_consumption(ij, ia, io, iq, ig, iv)
                             enddo
                         enddo
                     enddo
@@ -266,10 +269,10 @@ contains
     end subroutine
 
     ! solve the household's portfolio decision
-    subroutine solve_portfolio(ij, ia, iq)
+    subroutine solve_portfolio(ij, ia, iq, iv)
 
         implicit none
-        integer, intent(in) :: ij, ia, iq
+        integer, intent(in) :: ij, ia, iq, iv
         real*8 :: x_in, port0, port1, tolerance
         logical :: check
 
@@ -277,6 +280,7 @@ contains
         ij_com = ij
         ia_com = ia
         iq_com = iq
+        iv_com = iv
 
         ! check for corner solutions
         port0 = foc_port(0d0)
@@ -285,9 +289,9 @@ contains
         ! use intermediate value theorem
         if(port0*port1 > 0d0)then
             if(abs(port0) > abs(port1))then
-                omega_plus(ij, ia) = 1d0
+                omega_plus(ij, ia, iq, iv) = 1d0
             else
-                omega_plus(ij, ia) = 0d0
+                omega_plus(ij, ia, iq, iv) = 0d0
             endif
             return
         else
@@ -307,7 +311,7 @@ contains
             ! write screen output in case of a problem
             if(check)write(*,'(a, 2i4)')'ERROR IN ROOTFINDING PORT : ', ij, ia, iq
 
-            omega_plus(ij, ia, iq) = x_in
+            omega_plus(ij, ia, iq, iv) = x_in
 
             ! reset tolerance level to original value
             call settol_root(1d-8)
@@ -316,10 +320,10 @@ contains
     end subroutine
 
     ! solve the household's consumption-savings decision
-    subroutine solve_consumption(ij, ia, io, ig, iv, iq)
+    subroutine solve_consumption(ij, ia, io, iq, ig, iv)
 
         implicit none
-        integer, intent(in) :: ij, ia, io, ig, iv, iq
+        integer, intent(in) :: ij, ia, io, iq, ig, iv
         real*8 :: x_in
         logical :: check
 
@@ -335,12 +339,12 @@ contains
         ij_com = ij
         ia_com = ia
         io_com = io
+        iq_com = iq
         ig_com = ig
         iv_com = iv
-        iq_com = iq
 
         ! get best initial guess from future period
-        x_in = a_plus(ij+1, ia, io, ig, iv, iq)
+        x_in = a_plus(ij+1, ia, io, iq, ig, iv)
         check = .false.
 
         ! solve the household problem using rootfinding
@@ -356,14 +360,14 @@ contains
         endif
 
         ! copy decisions
-        a_plus(ij, ia, io, ig, iv, iq) = x_in
-        c(ij, ia, io, ig, iv, iq) = cons_com
-        V(ij, ia, io, ig, iv, iq) = valuefunc(x_in, cons_com, ij, iq)
+        a_plus(ij, ia, io, iq, ig, iv) = x_in
+        c(ij, ia, io, iq, ig, iv) = cons_com
+        V(ij, ia, io, iq, ig, iv) = valuefunc(x_in, cons_com, ij, iq, iv)
 
     end subroutine
 
     ! for calculating the rhs of the first order condition at age ij
-    subroutine interpolate(ij, iq)
+    subroutine interpolate(ij, iq, iv)
 
         implicit none
         integer, intent(in) :: ij, iq
@@ -371,209 +375,177 @@ contains
         real*8 :: X_p, c_p, varphi, dist, EV, R_port
         integer :: ixl, ixr
 
-        RHS(ij, :) = 0d0
-        Q(ij, :) = 0d0
+        RHS(ij, :, :, :) = 0d0
+        Q(ij, :, :, :) = 0d0
         iq_com = iq
+        iv_com = iv
 
         do ia = 0, NA
             do ig = 1, NW
                 do iv = 1, NR
                     do iq = 1, NE
                         ! get return on the portfolio
-                        R_port = 1d0 + rb + omega_plus(ij, ia, iq)*(rk(iv) - rb)
+                        R_port = 1d0 + rb + omega_plus(ij, ia, iq, iv)*(rk(iv) - rb)
                         
                         ! get distributional weight
-                        dist = dist_zeta(ig)*dist_vtheta(iv)*pi(iq_com, iq)
+                        dist = dist_zeta(ig)*pi_Omega(iv_com, iv)*pi_eta(iq_com, iq)
                         
                         ! get RHS of foc and Q
-                        RHS(ij, ia, iq_com) = RHS(ij, ia, iq) + &
-                                              dist*R_port*margu(c(ij+1, ia, io, ig, iv, iq))
-                        Q(ij, ia, iq_com)   = Q(ij, ia) + dist*V(ij+1, ia, io, ig, iv, iq)**egam/egam
+                        RHS(ij, ia, iq_com, iv_com) = RHS(ij, ia, iq_com, iv_com) + &
+                                              dist*R_port*margu(c(ij+1, ia, io, iq, ig, iv))
+                        Q(ij, ia, iq_com, iv_com)   = Q(ij, ia, iq_com, iv_com) + dist*V(ij+1, ia, io, iq, ig, iv)**egam/egam
                         !?? why **egam/egam in the line above and (egam*Q(ij, ia))**(1d0/egam) below?
                     enddo
                 enddo
             enddo
             
-            RHS(ij, ia, iq_com) = (beta*psi(ij+1)*RHS(ij, ia, iq_com))**(-1/gamma)
-            Q(ij, ia, iq_com)   = (egam*Q(ij, ia))**(1d0/egam)
+            RHS(ij, ia, iq_com, iv_com) = (beta*psi(ij+1)*RHS(ij, ia, iq_com, iv_com))**(-1/gamma)
+            Q(ij, ia, iq_com, iv_com)   = (egam*Q(ij, ia))**(1d0/egam)
 
         enddo
     end subroutine                    
 
-!##############################################################################
-! Adjust up to here
-!##############################################################################
 
     ! determines the invariant distribution over state space
     subroutine get_distribution()
 
         implicit none
-        integer :: ij
+        integer :: ij, ia, io, iq, ig, iv
+        real*8 :: varphi
 
         ! set distributions to zero
         phi_ij(:, :, :, :, :, :) = 0d0
-        phi_a(:, :) = 0d0
-        phi_aoe(:, :, :, :) = 0d0
+        phi_aplus(:, :) = 0d0
+        phi_aoeO(:, :, :, :) = 0d0
+        phi_eta(:, :) = 0d0
+        phi_Omega(:, :) = 0d0
+        
 
-        do ij = 1, JJ
+        ! get initial distribution in age 1
+        do ig = 1, NW
+            phi_ij(1, 0, 0, iq_initial, ig, iv_initial) = dist_zeta(ig)
+        enddo
 
-            ! get distribution on cash-on-hand grid
-            call get_distribution_ij(ij)
+        do ij = 1, JJ-1
 
-            ! get distribution on asset grid
+            ! get distribution of next period asset
             call get_distribution_a(ij)
             
-            ! get joint-distribution on asset, omega, eta grid
-            call get_distribution_aoe(ij)
+            ! get joint-distribution of next-period asset, next-period omega, eta, and Omega
+            call get_distribution_aoeO(ij)
+            
+            ! get distribution cohort ij+1 across all states z(t+1)
+            call get_distribution_ij(ij)
         enddo
 
     end subroutine
 
-    ! to calculate distribution of cohort ij
-    subroutine get_distribution_ij()
-
-    
-    end subroutine
-
-!##############################################################################
-    ! determines the invariant distribution over state space
-    subroutine get_distribution()
-
+    ! to calculate distribution of a_plus for cohort ij
+    subroutine get_distribution_a(ij)
         implicit none
-        integer :: ij
-
-        ! set distributions to zero
-        phi_X(:, :) = 0d0
-        phi_a(:, :) = 0d0
-
-        do ij = 1, JJ
-
-            ! get distribution on cash-on-hand grid
-            call get_distribution_X(ij)
-
-            ! get distribution on asset grid
-            call get_distribution_a(ij)
-        enddo
-
-    end subroutine
-
-
-    ! to calculate distribution on cash-on-hand grid
-    subroutine get_distribution_X(ij)
-
-        implicit none
-        integer, intent(in) :: ij
-        integer :: ia, iw, isr, ixl, ixr
-        real*8 :: varphi, X_p, R_port, dist
-
-        if(ij == 1)then
-
-            ! get initial distribution at age 1 of cash-on-hand
-            do iw = 1, NW
-
-                ! get initial cash-on-hand
-                X_p = w*eff(1)*zeta(iw)
-
-                ! derive interpolation weights
-                call linint_Grow(X_p, X_l, X_u, X_grow, NX, ixl, ixr, varphi)
-
-                ! get distributional weight
-                dist = dist_zeta(iw)
-
-                ! initialize the distribution
-                phi_X(1, ixl) = phi_X(1, ixl) + dist*varphi
-                phi_X(1, ixr) = phi_X(1, ixr) + dist*(1d0-varphi)
-            enddo
-
-        elseif(ij <= JR-1)then
-
-            ! iterate over yesterdays asset distribution
-            do ia = 0, NA
-
-                ! iterate over current shocks
-                do iw = 1, NW
-                    do isr = 1, NSR
-
-                        ! get today's cash-on-hand
-                        R_port = 1d0 + r_f + omega_plus(ij-1, ia)*(mu_r + vtheta(isr))
-                        X_p = R_port*a(ia)/eps(isr) + w*eff(ij)*zeta(iw)
-
-                        ! derive interpolation weights
-                        call linint_Grow(X_p, X_l, X_u, X_grow, NX, ixl, ixr, varphi)
-
-                        ! get distributional weight
-                        dist = dist_zeta(iw)*dist_epsvtheta(isr)
-
-                        phi_X(ij, ixl) = phi_X(ij, ixl) + dist*varphi*phi_a(ij-1, ia)
-                        phi_X(ij, ixr) = phi_X(ij, ixr) + dist*(1d0-varphi)*phi_a(ij-1, ia)
+        integer :: ij, ia, io, iq, ig, iv
+        integer :: ial, iar
+        
+        
+        ! derive interpolation weights for a+ and assign prob to discrete phi_aplus(ij, ia)
+        do ia = 0, NA
+            do io = 0, NO
+                do iq = 0, NE
+                    do ig = 0, NW
+                        do iv = 0, NR
+                            call linint_Grow(a_plus(ij, ia, io, iq, ig, iv), a_l, a_u, a_grow, &
+                                 NA, ial, iar, varphi_a)
+                                 
+                            phi_aplus(ij, ial) = phi_aplus(ij, ial) + &
+                                                 varphi_a*phi_ij(ij, ia, io, iq, ig, iv)
+                                                 
+                            phi_aplus(ij, iar) = phi_aplus(ij, iar) + &
+                                                 (1-varphi_a)*phi_ij(ij, ia, io, iq, ig, iv)
+                        enddo
                     enddo
                 enddo
             enddo
+        enddo
+                        
+    end subroutine
 
-        else
-
-            ! iterate over yesterdays asset distribution
-            do ia = 0, NA
-
-                ! iterate over current shocks
-                do isr = 1, NSR
-
-                    ! get today's cash-on-hand
-                    R_port = 1d0 + r_f + omega_plus(ij-1, ia)*(mu_r + vtheta(isr))
-                    X_p = R_port*a(ia) + pen(ij)
-
-                    ! derive interpolation weights
-                    call linint_Grow(X_p, X_l, X_u, X_grow, NX, ixl, ixr, varphi)
-
-                    ! get distributional weight
-                    dist = dist_epsvtheta(isr)
-
-                    phi_X(ij, ixl) = phi_X(ij, ixl) + dist*varphi*phi_a(ij-1, ia)
-                    phi_X(ij, ixr) = phi_X(ij, ixr) + dist*(1d0-varphi)*phi_a(ij-1, ia)
+    ! to calculate the joint distribution of a_plus, eta, Omega of cohort ij
+    subroutine get_distribution_aoeO(ij)
+        implicit none
+        integer :: ij, ia, io, iq, ig, iv
+        integer ::ioml, iomr
+        
+        ! derive distribution of discrete eta and Omega
+        do ia = 0, NA
+            do io = 0, NO
+                do iq = 0, NE
+                    do ig = 0, NW
+                        do iv = 0, NR
+                            phi_eta(ij, iq) = phi_eta(ij, iq) + phi_ij(ij, ia, io, iq, ig, iv)
+                            phi_Omega(ij, iv) = phi_Omega(ij, iv) + phi_ij(ij, ia, io, iq, ig, iv)
+                        enddo
+                    enddo
                 enddo
             enddo
-        endif
-
-    end subroutine
-
-
-    ! to calculate the end of period asset distribution
-    subroutine get_distribution_a(ij)
-
-        implicit none
-        integer, intent(in) :: ij
-        integer :: ix, ial, iar
-        real*8 :: varphi
-
-        ! iterate over todays cash on hand
-        do ix = 0, NX
-
-            ! interpolate asset decision
-            call linint_Grow(a_plus(ij, ix), a_l, a_u, a_grow, NA, ial, iar, varphi)
-
-            ! restrict values to grid just in case
-            ial = min(ial, NA)
-            iar = min(iar, NA)
-            varphi = min(varphi, 1d0)
-
-            ! get end of period asset distribution
-            phi_a(ij, ial) = phi_a(ij, ial) + varphi*phi_X(ij, ix)
-            phi_a(ij, iar) = phi_a(ij, iar) + (1d0-varphi)*phi_X(ij, ix)
+        enddo    
+     
+        ! derive interpolation weights for omega_plus and joint-distribute
+        do ia = 0, NA
+            do iq = 0, NE
+                do iv = 0, NR
+                    call linint_Grow(omega_plus(ij, ia, iq, iv), omega_l, &
+                        omega_u, omega_grow, NA, ial, iar, varphi_o)                
+                                 
+                    phi_aoeO(ij, ia, ioml, iq, iv) = phi_aoeO(ij, ia, ioml, iq, iv) + &
+                                                     varphi_o*phi_eta(ij, iq)*phi_Omega(ij, iv)&
+                                                     *phi_ij(ij, ia, io, iq, ig, iv)
+                                         
+                    phi_aoeO(ij, ia, iomr, iq, iv) = phi_aoeO(ij, ia, ioml, iq, iv) + &
+                                                     (1-varphi_o)*phi_eta(ij, iq)*phi_Omega(ij, iv)&
+                                                     *phi_ij(ij, ia, io, iq, ig, iv)
+                enddo
+            enddo
         enddo
-
+        
     end subroutine
-
+        
+    ! to calculate the distribution of cohort ij+1 across all states z(t+1)
+    subroutine get_distribution_ij(ij)
+        implicit none
+        integer :: ij, ia, io, iq, ig, iv
+        integer ::
+        
+        !distribute from phi_aoeO to next period cohort across all states
+        do ia = 0, NA
+            do io = 0, NO
+                do iq = 0, NE
+                    do iq_com = 0, NE
+                        do ig = 0, NW
+                            do iv = 0, NR
+                                do iv_com = 0, NR
+                                    phi_ij(ij+1, ia, io, iq, ig, iv) = phi_ij(ij+1, ia, io, iq, ig, iv) +&
+                                        pi_eta(iq_com, iq)*dist_zeta(ig)*pi_Omega(iv_com, iv)*&
+                                        phi_aoeO(ij, ia, io, iq_com, iv_com)
+                                enddo
+                            enddo
+                        enddo
+                    enddo
+                enddo
+            enddo
+        enddo
+        
+    end subroutine
 
     ! subroutine for calculating quantities
     subroutine aggregation()
 
         implicit none
-        integer :: ij, ik, ib, ip, is
+        integer :: ij, ia, io, iq, ig, iv
         real*8 :: workpop, LL_old, KK_old, BB_old
 
-        LL_old = LL ! store current labour supply to LL_old
+        ! Store current aggregate quantities
+        LL_old = LL 
         KK_old = KK
-        BB_old = BB
 
         ! calculate cohort aggregates
         c_coh(:) = 0d0
@@ -583,113 +555,111 @@ contains
         b_coh(:) = 0d0
         v_coh(:) = 0d0
 
-print*, 'Aggregation1'
-
         do ij = 1, JJ
-            do ik = 0, NK
-                do ib = 0, NB
-                    do ip = 1, NP
-                        do is = 1, NS
-                            c_coh(ij) = c_coh(ij) + c(ij, ik, ib, ip, is)*phi(ij, ik, ib, ip, is)
-                            l_coh(ij) = l_coh(ij) + l(ij, ik, ib, ip, is)*phi(ij, ik, ib, ip, is)
-                            y_coh(ij) = y_coh(ij) + eff(ij)*theta(ip)*l(ij, ik, ib, ip, is)*phi(ij, ik, ib, ip, is)
-                            k_coh(ij) = k_coh(ij) + k(ik)*phi(ij, ik, ib, ip, is)
-!~                             print*, k_coh(ij)
-                            b_coh(ij) = b_coh(ij) + b(ib)*phi(ij, ik, ib, ip, is)
-                            v_coh(ij) = v_coh(ij) + V(ij, ik, ib, ip, is)*phi(ij, ik, ib, ip, is)
+            do ia = 0, NA
+                do io = 0, NO
+                    do iq = 0, NE
+                        do ig = 0, NW
+                            do iv = 0, NR
+                                c_coh(ij) = c_coh(ij) + phi_ij(ij, ia, io, iq, ig, iv)*&
+                                    c(ij, ia, io, iq, ig, iv)
+                                l_coh(ij) = l_coh(ij) + phi_ij(ij, ia, io, iq, ig, iv)*&
+                                    eff(ij)*exp(eta(iq) + zeta(ig)
+                                a_coh(ij) = a_coh(ij) + phi_ij(ij, ia, io, iq, ig, iv)*&
+                                    a(ia)
+                                b_coh(ij) = b_coh(ij) + phi_ij(ij, ia, io, iq, ig, iv)*&
+                                    a(ia)*(1-omega_plus(ij, ia, q,v))
+                                k_coh(ij) = k_coh(ij) + phi_ij(ij, ia, io, iq, ig, iv)*&
+                                    a(ia)*omega_plus(ij, ia, q,v)
+                                o_coh(ij) = o_coh(ij) + phi_ij(ij, ia, io, iq, ig, iv)*&
+                                    omega(io)
                         enddo
                     enddo
                 enddo
             enddo
         enddo
 
-print*, 'Aggregation2'
-
         ! calculate aggregate quantities
         CC = 0d0
         LL = 0d0
-        HH = 0d0
+        AA = 0d0
         KK = 0d0
         BB = 0d0
         workpop = 0d0
         do ij = 1, JJ
             CC = CC + c_coh(ij)*m(ij)
             LL = LL + l_coh(ij)*m(ij)
-            HH = HH + y_coh(ij)*m(ij)
+            AA = AA + y_coh(ij)*m(ij)
             KK = KK + k_coh(ij)*m(ij)
             BB = BB + b_coh(ij)*m(ij)
             if(ij < JR) workpop = workpop + m(ij)
         enddo
 
-print*, 'Aggregation3'
-
         ! damping and other quantities [damping acording to Gauss-Seidel procedure]
-        KK = damp*(KK) + (1d0-damp)*KK_old !check this
-print*, 'KK =' , KK       
-        BB = damp*(BB) + (1d0-damp)*BB_old !check this
-print*, 'BB =', BB        
+        KK = damp*(KK) + (1d0-damp)*KK_old 
         LL = damp*LL + (1d0-damp)*LL_old
-print*, 'LL =', LL        
         II = (n_p+delta)*KK
-print*, 'II =', II    
-        YY = Omega * KK ** alpha * LL ** (1d0-alpha)
-print*, 'YY =', YY 
+        YY = Omega_bar * KK ** alpha * LL ** (1d0-alpha)
 
         ! get average income and average working hours
-        INC = w*LL/workpop ! average labour earning
-        HH  = HH/workpop
+        INC = w*LL/workpop ! average income
+        HH  = HH/workpop 
 
         ! get difference on goods market
-        DIFF = YY-CC-II-GG
-print*, 'Aggregation5'
+        DIFF = YY-CC-II
+
+!##############################################################################
+! Haven't adjust the bond_return subroutine below
+!##############################################################################
+
+    ! subroutine for updating bond return
+    subroutine bond_return()
+        implicit none
+    
     end subroutine
 
+!##############################################################################
 
     ! subroutine for calculating government parameters
     subroutine government()
 
         implicit none
-        integer :: ij
+        integer :: ij, iv
         real*8 :: expend
-
-        ! set government quantities and pension payments
-!~         if(.not. reform_on)then
-!~             GG = gy*YY
-!~             BB = by*YY
-!~         endif
-
-        ! calculate government expenditure
-!~         expend = GG + (1d0+r)*BB - (1d0+n_p)*BB
-
-!~         ! get budget balancing tax rate
-!~         if(tax == 1)then
-!~             tauc = (expend - (tauw*w*LL + taur*r*AA))/CC
-!~             p    = 1d0 + tauc
-!~         elseif(tax == 2)then
-!~             tauw = (expend - tauc*CC)/(w*LL + r*AA)
-!~             taur = tauw
-!~         elseif(tax == 3)then
-!~             tauw = (expend - (tauc*CC + taur*r*AA))/(w*LL)
-!~         else
-!~             taur = (expend - (tauc*CC + tauw*w*LL))/(r*AA)
-!~         endif
-
-!~         taxrev(1) = tauc*CC
-!~         taxrev(2) = tauw*w*LL
-!~         taxrev(3) = taur*r*AA
-!~         taxrev(4) = sum(taxrev(1:3))
-
-        ! get budget balancing social security contribution
-        pen(JR:JJ) = kappa*INC
-        PP = 0d0
-        do ij = JR, JJ
-            PP = PP + pen(ij)*m(ij)
+        
+        ! calculate pension
+        pen = 0d0
+        do iv = 1, NR
+            pen(JR:JJ, iv) = kappa*w(iv)*eff(JR-1)
         enddo
 
-        taup = PP/(w*LL)
+        ! get total pension spending
+        do ij = 1, JJ
+            do iv = 1, NR
+                total_pen = total_pen + m(ij)*pen(ij, iv)*phi_Omega(ij, iv)
+            enddo
+        enddo
+        
+        ! calculate total working income
+        do ij = 1, JJ
+            do iq = 0, NE
+                do ig = 0, NW
+                    do iv = 0, NR
+                        total_INC = total_INC + m(ij)*phi_Omega(ij, iv)*phi_eta(ij, iq)&
+                                    *dist_zeta(ig)*w(iv)*eff(ij)*exp(eta(iq) + zeta(ig))
+                    enddo
+                enddo
+            enddo
+        enddo
+
+        ! calculate budget-balancing income tax rate
+        tauw = total_pen\total_INC
 
     end subroutine
 
+!##############################################################################
+! Adjust up to here
+!##############################################################################
 
     ! subroutine for writing output
     subroutine output()

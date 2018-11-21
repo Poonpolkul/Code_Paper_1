@@ -20,15 +20,9 @@ module globals
     ! number of white noise (zeta) shocks
     integer, parameter :: NW = 7
 
-!~     ! number of transitory (epsilon) shocks
-!~     integer, parameter :: NS = 7
-
     ! number of rate of return (vtheta) shocks 
     ![in our paper = aggregate productivity shock]
     integer, parameter :: NR = 7
-    
-!~     ! number of eps-vtheta shocks
-!~     integer, parameter :: NSR = NS*NR
     
     ! number of eta shocks
     integer, parameter :: NE = 5
@@ -39,9 +33,6 @@ module globals
     ! number of points on the risky share grid
     integer, parameter :: NO = 200
 
-!~     ! number of points on the cash-on-hand-grid
-!~     integer, parameter :: NX = 200
-
     ! household preference parameters 
     real*8, parameter :: gamma = 0.10d0 
     real*8, parameter :: beta  = 0.96d0
@@ -49,8 +40,8 @@ module globals
     
     ! household risk process
     real*8, parameter :: sigma_zeta   = 0.0738d0
-    real*8, parameter :: sigma_eta    = 0.05d0
-    real*8, parameter :: sigma_vtheta = 0.157d0**2d0
+    real*8, parameter :: sigma_eps    = 0.05d0
+    real*8, parameter :: sigma_vtheta = 0.157d0**2d0 !Need new value
     real*8, parameter :: rho         = 0.98d0
     
     ! size of the asset grid
@@ -63,26 +54,16 @@ module globals
     real*8, parameter :: omega_u    = 1.0d0
     real*8, parameter :: omega_grow = 0.04d0
 
-!~     ! lower and upper bound for the eta-grid
-!~     real*8 :: eta_l(JJ), eta_u(JJ)
-
     ! discretized shocks
     real*8 :: dist_zeta(NW), zeta(NW)
-    real*8 :: dist_vtheta(NSR), vtheta(NSR)
-    real*8 :: pi(NS, NS), eta(NS)
-    integer :: is_initial = 3
+    real*8 :: pi_eta(NS, NS), eta(NS)
+    real*8 :: pi_Omega(NR, NR), Omega(NR)
+    integer :: iq_initial = 3, iv_initial = 4
     
-!~     real*8 :: dist_epsvtheta(NSR), eps(NSR), vtheta(NSR)
-
-!~     ! should cohort averages and variance be calculated analytically
-!~     logical, parameter :: analytical = .true.
-!~     !logical, parameter :: analytical = .false.     ! for quintiles
-
     ! production parameters
     real*8, parameter :: alpha = 0.36d0
     real*8, parameter :: delta = 1d0-(1d0-0.0823d0)
     real*8, parameter :: Omega_bar = 1.60d0
-    real*8 :: Omega(0:NR)
     
     ! demographic parameters 
     real*8, parameter :: n_p   = 0.01d0 
@@ -112,6 +93,7 @@ module globals
     ! government variables
     real*8 :: tauw
     real*8 :: pen(JJ, 0:NR), taxrev
+    real*8 :: total_pen
 
     ! cohort aggregate variables
     real*8 :: c_coh(JJ), y_coh(JJ), a_coh(JJ), omega_coh(JJ), l_coh(JJ), v_coh(JJ)
@@ -122,16 +104,17 @@ module globals
     ! individual variables
     real*8 :: a(0:NA), omega(0:NO)
     real*8 :: a_bor(JJ)
-    real*8 :: omega_plus(JJ, 0:NA, 0:NS), Q(JJ, 0:NA, 0:NS)
-    real*8 :: c(JJ, 0:NA, 0:NO, 0:NS, 0:NW, 0:NSR), a_plus(JJ, 0:NA, 0:NO, 0:NS, 0:NW, 0:NSR)
-    real*8 :: V(JJ, 0:NA, 0:NO, 0:NS, 0:NW, 0:NSR) = 0d0
-    real*8 :: phi(JJ, 0:NA, 0:NO, 0:NS, 0:NW, 0:NSR)
-    real*8 :: phi_a(0:NA), phi_aoe(0:NA, 0:NO, 0:NS)
+    real*8 :: omega_plus(JJ, 0:NA, 0:NE, 0:NR), Q(JJ, 0:NA, 0:NE, 0:NR)
+    real*8 :: c(JJ, 0:NA, 0:NO, 0:NE, 0:NW, 0:NR), a_plus(JJ, 0:NA, 0:NO, 0:NE, 0:NW, 0:NR)
+    real*8 :: V(JJ, 0:NA, 0:NO, 0:NE, 0:NW, 0:NR) = 0d0
+    real*8 :: phi(JJ, 0:NA, 0:NO, 0:NE, 0:NW, 0:NR)
+    real*8 :: phi_aplus(JJ, 0:NA), phi_aoeO(JJ, 0:NA, 0:NO, 0:NE, 0:NR)
+    real*8 :: phi_eta(JJ, 0:NE), phi_Omega(JJ, 0:NR)
     
     ! numerical variables
-    real*8 :: RHS(JJ, 0:NA, 0:NS)
-    integer :: i, ij_com, ia_com, io_com, ig_com, iv_com, iq_com
-    real*8 :: cons_com, lab_com, DIFF, INC_init ! INC_init??????
+    real*8 :: RHS(JJ, 0:NA, 0:NE, 0:NR)
+    integer :: i, ij_com, ia_com, io_com, iq_com, ig_com, iv_com
+    real*8 :: cons_com, lab_com, DIFF, INC_init !do we need INC_init?
 
 contains
 
@@ -147,7 +130,7 @@ contains
         a_plus  = x_in
 
         ! calculate effective labour earnings
-        earnings  = (1-tau)*w(iv)*eff(ij_com+1)*exp(eta(iq_com) + zeta(ig_com)) &
+        earnings  = (wn(iv)*eff(ij_com+1)*exp(eta(iq_com) + zeta(ig_com)) &
                     + pen(ij_com, iv_com)
                 
         ! calculate return on next-period portfolio, R
@@ -160,7 +143,8 @@ contains
         call linint_Grow(a_plus, a_l, a_u, a_grow, &
                     NA, ial, iar, varphi)
         
-        tomorrow = varphi*RHS(ij_com, ial, iq_com) + (1d0-varphi)*RHS(ij_com, iar, iq_com)
+        tomorrow = varphi*RHS(ij_com, ial, iq_com, iv_com) + &
+                   (1d0-varphi)*RHS(ij_com, iar, iq_com, iv_com)
         
         ! calculate first order condition for consumption
         foc_cons = cons_com - tomorrow
@@ -191,7 +175,7 @@ contains
                     NO, ioml, iomr, varphi)
 
                     ! get distributional weight
-                    dist = dist_zeta(ig)*dist_vtheta(iv)*pi(iq_com, iq)
+                    dist = dist_zeta(ig)*pi_Omega(iv_com, iv)*pi_eta(iq_com, iq)
 
                     ! calculate consumption and FOC
                     c_p = varphi      *c(ij_com+1, ia_com, ioml, ig, iv, iq) + &
@@ -220,7 +204,7 @@ contains
 !##############################################################################
 
     ! calculates the value function
-    function valuefunc(a_plus, cons, ij, iq)
+    function valuefunc(a_plus, cons, ij, iq, iv)
 
         implicit none
         integer, intent(in) :: ij
@@ -237,7 +221,7 @@ contains
         ! calculate tomorrow's part of the value function
         valuefunc = 0d0
         if(ij < JJ)then
-            valuefunc = max(varphi*Q(ij, ial, iq) + (1d0-varphi)*Q(ij, iar, iq), 1d-10)**egam/egam
+            valuefunc = max(varphi*Q(ij, ial, iq, iv) + (1d0-varphi)*Q(ij, iar, iq, iv), 1d-10)**egam/egam
         endif
 
         ! add todays part and discount
