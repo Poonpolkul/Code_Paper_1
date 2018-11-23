@@ -25,6 +25,7 @@ program SOLG_LR
 
 contains
 
+!##############################################################################
 
     ! computes the initial steady state of the economy
     subroutine get_SteadyState()
@@ -72,6 +73,7 @@ contains
 
     end subroutine
 
+!##############################################################################
 
     ! initializes the remaining model parameters and variables
     subroutine initialize
@@ -122,9 +124,9 @@ contains
         call normal_discrete(zeta, dist_zeta, 0d0, sigma_zeta)
         zeta = exp(zeta)
 
-        ! calculate the shock process for aggregate productivity (Omega)
-        call discretize_AR(rho, Omega_bar, sigma_vtheta, Omega, pi_Omega)
-        Omega = exp(Omega) ! Do we need exp()????
+        ! calculate the shock process for aggregate productivity (TProd)
+        call discretize_AR(rho, TProd_bar, sigma_vtheta, TProd, pi_TProd)
+        TProd = exp(TProd) ! Do we need exp()????
 
         ! calculate the shock process for eta
         call discretize_AR(rho, 0d0, sigma_eps, eta, pi_eta)
@@ -149,18 +151,20 @@ contains
 
     end subroutine
 
+!##############################################################################
+
     ! subroutine for calculating prices
     subroutine prices()
 
         implicit none
-        integer :: iv, ijj
+        integer :: iv, ij, ijj
         real*8 :: abor_temp
         
         do iv = 1, NR
-            rk(iv) = Omega(iv)*alpha*(KK/LL)**(alpha-1d0)-delta 
+            rk(iv) = TProd(iv)*alpha*(KK/LL)**(alpha-1d0)-delta 
         enddo
         
-        if (iter=1) then
+        if (iter==1) then
             rb = 0
             do iv = 1, NR
                 rb = rb + (rk(iv)-delta)/NR
@@ -169,7 +173,7 @@ contains
         
         ! calculate wage rate
         do iv = 1, NR
-            w(iv) = Omega(iv)*(1d0-alpha)*(KK/LL)**alpha
+            w(iv) = TProd(iv)*(1d0-alpha)*(KK/LL)**alpha
         enddo
         
         ! calculate after-tax wage rate
@@ -198,12 +202,13 @@ contains
 
     end subroutine
 
+!##############################################################################
 
     ! determines the solution to the household optimization problem
     subroutine solve_household()
 
         implicit none
-        integer :: ij, ik, ib, ip, 
+        integer :: ij, ia, io, iq, ig, iv
         real*8 :: k_in, b_in, wage, available
         real*8 :: a_in(2)
         logical :: check
@@ -215,10 +220,10 @@ contains
                     do ig = 1, 1
                         do iv = 1, NR
                             a_plus(JJ, ia, io, iq, ig, iv) = 0d0
-                            omega_plus(JJ, ia, iv) = 0d0
+                            omega_plus(JJ, ia, iq, iv) = 0d0
                             c(JJ, ia, io, iq, ig, iv) = (1d0 + rb + omega(io)*(rk(iv)-rb))*a(ia) &
                             + pen(JJ, iv)
-                            V(JJ, ia, io, iq, ig, iv) = valuefunc(0d0, c(JJ, ia, io, iq, ig, iv), JJ, iq)
+                            V(JJ, ia, io, iq, ig, iv) = valuefunc(0d0, c(JJ, ia, io, iq, ig, iv), JJ, iq, iv)
                         enddo
                     enddo                
                 enddo
@@ -238,6 +243,7 @@ contains
                         ! solve for 0 < omega <= 1
                         else
                             call solve_portfolio(ij, ia, iq, iv)
+                        endif
                     enddo
                 enddo
             enddo
@@ -267,6 +273,8 @@ contains
         enddo
 
     end subroutine
+
+!##############################################################################
 
     ! solve the household's portfolio decision
     subroutine solve_portfolio(ij, ia, iq, iv)
@@ -319,6 +327,8 @@ contains
 
     end subroutine
 
+!##############################################################################
+
     ! solve the household's consumption-savings decision
     subroutine solve_consumption(ij, ia, io, iq, ig, iv)
 
@@ -351,7 +361,7 @@ contains
         call fzero(x_in, foc_cons, check)
 
         ! write screen output in case of a problem
-        if(check)write(*,'(a, 2i4)')'ERROR IN ROOTFINDING CONS : ', ij, ix
+        if(check)write(*,'(a, 2i4)')'ERROR IN ROOTFINDING CONS : ', ij, ia
 
         ! check for borrowing constraint
         if(x_in < a_bor(ij_com))then
@@ -366,14 +376,17 @@ contains
 
     end subroutine
 
+
+!##############################################################################
+
     ! for calculating the rhs of the first order condition at age ij
     subroutine interpolate(ij, iq, iv)
 
         implicit none
-        integer, intent(in) :: ij, iq
-        integer :: ia, iw, isr
+        integer, intent(in) :: ij, iq, iv
+        integer :: ia, ig, iv_next, iq_next
         real*8 :: X_p, c_p, varphi, dist, EV, R_port
-        integer :: ixl, ixr
+        integer :: ioml, iomr
 
         RHS(ij, :, :, :) = 0d0
         Q(ij, :, :, :) = 0d0
@@ -382,29 +395,40 @@ contains
 
         do ia = 0, NA
             do ig = 1, NW
-                do iv = 1, NR
-                    do iq = 1, NE
+                do iv_next = 1, NR
+                    do iq_next = 1, NE
                         ! get return on the portfolio
-                        R_port = 1d0 + rb + omega_plus(ij, ia, iq, iv)*(rk(iv) - rb)
+                        R_port = 1d0 + rb + omega_plus(ij, ia, iq_next, iv_next)*(rk(iv_next) - rb)
                         
+                        ! derive interpolation weights
+                        call linint_Grow(omega_plus(ij, ia, iq_next, iv_next), omega_l, &
+                        omega_u, omega_grow, NO, ioml, iomr, varphi)
+                        
+                        ! calculate next-period consumption
+                        c_p = varphi*c(ij_com+1, ia_com, ioml, iq_next, ig, iv_next) + &
+                          (1d0-varphi)*c(ij_com+1, ia_com, iomr, iq_next, ig, iv_next)
+                    
                         ! get distributional weight
-                        dist = dist_zeta(ig)*pi_Omega(iv_com, iv)*pi_eta(iq_com, iq)
+                        dist = dist_zeta(ig)*pi_Tprod(iv_com, iv_next)*pi_eta(iq_com, iq_next)
                         
                         ! get RHS of foc and Q
                         RHS(ij, ia, iq_com, iv_com) = RHS(ij, ia, iq_com, iv_com) + &
-                                              dist*R_port*margu(c(ij+1, ia, io, iq, ig, iv))
-                        Q(ij, ia, iq_com, iv_com)   = Q(ij, ia, iq_com, iv_com) + dist*V(ij+1, ia, io, iq, ig, iv)**egam/egam
+                                            dist*R_port*margu(c_p)
+                        Q(ij, ia, iq_com, iv_com)   = Q(ij, ia, iq_com, iv_com) + &
+                                            dist*(varphi*V(ij+1, ia, ioml, iq_next, ig, iv_next)+&
+                                            (1-varphi)*V(ij+1, ia, iomr, iq_next, ig, iv_next))**egam/egam
                         !?? why **egam/egam in the line above and (egam*Q(ij, ia))**(1d0/egam) below?
                     enddo
                 enddo
             enddo
             
             RHS(ij, ia, iq_com, iv_com) = (beta*psi(ij+1)*RHS(ij, ia, iq_com, iv_com))**(-1/gamma)
-            Q(ij, ia, iq_com, iv_com)   = (egam*Q(ij, ia))**(1d0/egam)
+            Q(ij, ia, iq_com, iv_com)   = (egam*Q(ij, ia, iq_com, iv_com))**(1d0/egam)
 
         enddo
     end subroutine                    
 
+!##############################################################################
 
     ! determines the invariant distribution over state space
     subroutine get_distribution()
@@ -416,9 +440,9 @@ contains
         ! set distributions to zero
         phi_ij(:, :, :, :, :, :) = 0d0
         phi_aplus(:, :) = 0d0
-        phi_aoeO(:, :, :, :) = 0d0
+        phi_aoep(:, :, :, :, :) = 0d0
         phi_eta(:, :) = 0d0
-        phi_Omega(:, :) = 0d0
+        phi_Tprod(:, :) = 0d0
         
 
         ! get initial distribution in age 1
@@ -440,12 +464,14 @@ contains
 
     end subroutine
 
+!##############################################################################
+
     ! to calculate distribution of a_plus for cohort ij
     subroutine get_distribution_a(ij)
         implicit none
         integer :: ij, ia, io, iq, ig, iv
         integer :: ial, iar
-        
+        real*8 :: varphi_a
         
         ! derive interpolation weights for a+ and assign prob to discrete phi_aplus(ij, ia)
         do ia = 0, NA
@@ -469,20 +495,23 @@ contains
                         
     end subroutine
 
-    ! to calculate the joint distribution of a_plus, eta, Omega of cohort ij
+!##############################################################################
+
+    ! to calculate the joint distribution of a_plus, eta, TProd of cohort ij
     subroutine get_distribution_aoeO(ij)
         implicit none
         integer :: ij, ia, io, iq, ig, iv
         integer ::ioml, iomr
+        real*8 :: varphi_o
         
-        ! derive distribution of discrete eta and Omega
+        ! derive distribution of discrete eta and TProd
         do ia = 0, NA
             do io = 0, NO
                 do iq = 0, NE
                     do ig = 0, NW
                         do iv = 0, NR
                             phi_eta(ij, iq) = phi_eta(ij, iq) + phi_ij(ij, ia, io, iq, ig, iv)
-                            phi_Omega(ij, iv) = phi_Omega(ij, iv) + phi_ij(ij, ia, io, iq, ig, iv)
+                            phi_Tprod(ij, iv) = phi_Tprod(ij, iv) + phi_ij(ij, ia, io, iq, ig, iv)
                         enddo
                     enddo
                 enddo
@@ -494,28 +523,29 @@ contains
             do iq = 0, NE
                 do iv = 0, NR
                     call linint_Grow(omega_plus(ij, ia, iq, iv), omega_l, &
-                        omega_u, omega_grow, NA, ial, iar, varphi_o)                
+                        omega_u, omega_grow, NA, ioml, iomr, varphi_o)                
                                  
-                    phi_aoeO(ij, ia, ioml, iq, iv) = phi_aoeO(ij, ia, ioml, iq, iv) + &
-                                                     varphi_o*phi_eta(ij, iq)*phi_Omega(ij, iv)&
+                    phi_aoep(ij, ia, ioml, iq, iv) = phi_aoep(ij, ia, ioml, iq, iv) + &
+                                                     varphi_o*phi_eta(ij, iq)*phi_Tprod(ij, iv)&
                                                      *phi_ij(ij, ia, io, iq, ig, iv)
                                          
-                    phi_aoeO(ij, ia, iomr, iq, iv) = phi_aoeO(ij, ia, ioml, iq, iv) + &
-                                                     (1-varphi_o)*phi_eta(ij, iq)*phi_Omega(ij, iv)&
+                    phi_aoep(ij, ia, iomr, iq, iv) = phi_aoep(ij, ia, ioml, iq, iv) + &
+                                                     (1-varphi_o)*phi_eta(ij, iq)*phi_Tprod(ij, iv)&
                                                      *phi_ij(ij, ia, io, iq, ig, iv)
                 enddo
             enddo
         enddo
         
     end subroutine
+
+!##############################################################################
         
     ! to calculate the distribution of cohort ij+1 across all states z(t+1)
     subroutine get_distribution_ij(ij)
         implicit none
         integer :: ij, ia, io, iq, ig, iv
-        integer ::
         
-        !distribute from phi_aoeO to next period cohort across all states
+        !distribute from phi_aoep to next period cohort across all states
         do ia = 0, NA
             do io = 0, NO
                 do iq = 0, NE
@@ -524,8 +554,8 @@ contains
                             do iv = 0, NR
                                 do iv_com = 0, NR
                                     phi_ij(ij+1, ia, io, iq, ig, iv) = phi_ij(ij+1, ia, io, iq, ig, iv) +&
-                                        pi_eta(iq_com, iq)*dist_zeta(ig)*pi_Omega(iv_com, iv)*&
-                                        phi_aoeO(ij, ia, io, iq_com, iv_com)
+                                        pi_eta(iq_com, iq)*dist_zeta(ig)*pi_TProd(iv_com, iv)*&
+                                        phi_aoep(ij, ia, io, iq_com, iv_com)
                                 enddo
                             enddo
                         enddo
@@ -535,6 +565,8 @@ contains
         enddo
         
     end subroutine
+
+!##############################################################################
 
     ! subroutine for calculating quantities
     subroutine aggregation()
@@ -564,15 +596,16 @@ contains
                                 c_coh(ij) = c_coh(ij) + phi_ij(ij, ia, io, iq, ig, iv)*&
                                     c(ij, ia, io, iq, ig, iv)
                                 l_coh(ij) = l_coh(ij) + phi_ij(ij, ia, io, iq, ig, iv)*&
-                                    eff(ij)*exp(eta(iq) + zeta(ig)
+                                    eff(ij)*exp(eta(iq) + zeta(ig))
                                 a_coh(ij) = a_coh(ij) + phi_ij(ij, ia, io, iq, ig, iv)*&
                                     a(ia)
                                 b_coh(ij) = b_coh(ij) + phi_ij(ij, ia, io, iq, ig, iv)*&
-                                    a(ia)*(1-omega_plus(ij, ia, q,v))
+                                    a(ia)*(1-omega_plus(ij, ia, iq, iv))
                                 k_coh(ij) = k_coh(ij) + phi_ij(ij, ia, io, iq, ig, iv)*&
-                                    a(ia)*omega_plus(ij, ia, q,v)
+                                    a(ia)*omega_plus(ij, ia, iq, iv)
                                 o_coh(ij) = o_coh(ij) + phi_ij(ij, ia, io, iq, ig, iv)*&
                                     omega(io)
+                            enddo
                         enddo
                     enddo
                 enddo
@@ -599,23 +632,43 @@ contains
         KK = damp*(KK) + (1d0-damp)*KK_old 
         LL = damp*LL + (1d0-damp)*LL_old
         II = (n_p+delta)*KK
-        YY = Omega_bar * KK ** alpha * LL ** (1d0-alpha)
+        YY = TProd_bar * KK ** alpha * LL ** (1d0-alpha)
 
         ! get average income and average working hours
-        INC = w*LL/workpop ! average income
-        HH  = HH/workpop 
+        do ij = 1, JJ
+            do ia = 0, NA
+                do io = 0, NO
+                    do iq = 0, NE
+                        do ig = 0, NW
+                            do iv = 0, NR
+                                INC = INC + w(iv)*phi_ij(ij, ia, io, iq, ig, iv)*&
+                                    eff(ij)*exp(eta(iq) + zeta(ig))
+                            enddo
+                        enddo
+                    enddo
+                enddo
+            enddo
+        enddo
+        INC = INC/workpop ! average income
+!~         HH  = HH/workpop 
 
         ! get difference on goods market
         DIFF = YY-CC-II
+    
+    end subroutine
 
-!##############################################################################
-! Haven't adjust the bond_return subroutine below
 !##############################################################################
 
     ! subroutine for updating bond return
     subroutine bond_return()
         implicit none
-    
+        
+        if (BB > 0d0) then
+            rb = rb*0.9d0
+        elseif (BB < 0d0) then
+            rb = rb*1.1d0
+        endif
+        
     end subroutine
 
 !##############################################################################
@@ -624,11 +677,10 @@ contains
     subroutine government()
 
         implicit none
-        integer :: ij, iv
-        real*8 :: expend
+        integer :: ij, iv, iq, ig
         
         ! calculate pension
-        pen = 0d0
+        pen(:,:) = 0d0
         do iv = 1, NR
             pen(JR:JJ, iv) = kappa*w(iv)*eff(JR-1)
         enddo
@@ -636,7 +688,7 @@ contains
         ! get total pension spending
         do ij = 1, JJ
             do iv = 1, NR
-                total_pen = total_pen + m(ij)*pen(ij, iv)*phi_Omega(ij, iv)
+                total_pen = total_pen + m(ij)*pen(ij, iv)*phi_Tprod(ij, iv)
             enddo
         enddo
         
@@ -645,7 +697,7 @@ contains
             do iq = 0, NE
                 do ig = 0, NW
                     do iv = 0, NR
-                        total_INC = total_INC + m(ij)*phi_Omega(ij, iv)*phi_eta(ij, iq)&
+                        total_INC = total_INC + m(ij)*phi_Tprod(ij, iv)*phi_eta(ij, iq)&
                                     *dist_zeta(ig)*w(iv)*eff(ij)*exp(eta(iq) + zeta(ig))
                     enddo
                 enddo
@@ -653,127 +705,59 @@ contains
         enddo
 
         ! calculate budget-balancing income tax rate
-        tauw = total_pen\total_INC
+        tauw = total_pen/total_INC
 
     end subroutine
 
-!##############################################################################
-! Adjust up to here
 !##############################################################################
 
     ! subroutine for writing output
     subroutine output()
 
         implicit none
-        integer :: ij, ik, ib, ip, is, iamax(JJ)
-        real*8 :: temp
-        real*8 :: exp_c(JJ), exp_l(JJ), exp_y(JJ)
-        real*8 :: var_c(JJ), var_l(JJ), var_y(JJ)
-        real*8 :: mas_c(JJ), mas_l(JJ), mas_y(JJ)
-        
+        integer :: ij, iamax(JJ), ages(JJ)
 
-        ! calculate cohort specific variances of logs
-        exp_c = 0d0 ; var_c = 0d0 ; mas_c = 0d0
-        exp_l = 0d0 ; var_l = 0d0 ; mas_l = 0d0
-        exp_y = 0d0 ; var_y = 0d0 ; mas_y = 0d0
+        ! check for the maximium grid points used
+        call check_grid_a(iamax)
+
+        ! set up age variable
+        ages = 20 + (/(ij, ij=1,JJ)/)
+
+        write(21, '(a,a)')' IJ      CONS    INCOME    ASSETS', &
+            '     OMEGA     IAMAX'
         do ij = 1, JJ
-            do ik = 0, NK
-                do ib = 0, NB
-                    do ip = 1, NP
-                        do is = 1, NS
-
-                            ! consumption
-                            if(c(ij, ik, ib, ip, is) > 0d0)then
-                                temp = log(c(ij, ik, ib, ip, is))
-                                exp_c(ij) = exp_c(ij) + temp*phi(ij, ik, ib, ip, is)
-                                var_c(ij) = var_c(ij) + temp**2*phi(ij, ik, ib, ip, is)
-                                mas_c(ij) = mas_c(ij) + phi(ij, ik, ib, ip, is)
-                            endif
-
-                            if(l(ij, ik, ib, ip, is) > 0.01d0)then
-
-                                ! hours
-                                temp = log(l(ij, ik, ib, ip, is))
-                                exp_l(ij) = exp_l(ij) + temp*phi(ij, ik, ib, ip, is)
-                                var_l(ij) = var_l(ij) + temp**2*phi(ij, ik, ib, ip, is)
-                                mas_l(ij) = mas_l(ij) + phi(ij, ik, ib, ip, is)
-
-                                ! earnings
-                                temp = log(w*eff(ij)*theta(ip)*l(ij, ik, ib, ip, is))
-                                exp_y(ij) = exp_y(ij) + temp*phi(ij, ik, ib, ip, is)
-                                var_y(ij) = var_y(ij) + temp**2*phi(ij, ik, ib, ip, is)
-                                mas_y(ij) = mas_y(ij) + phi(ij, ik, ib, ip, is)
-                            endif
-                        enddo
-                    enddo
-                enddo
-            enddo
-        enddo
-        exp_c = exp_c/max(mas_c, 1d-4) ; var_c = var_c/max(mas_c, 1d-4)
-        exp_l = exp_l/max(mas_l, 1d-4) ; var_l = var_l/max(mas_l, 1d-4)
-        exp_y = exp_y/max(mas_y, 1d-4) ; var_y = var_y/max(mas_y, 1d-4)
-        var_c = var_c - exp_c**2
-        var_l = var_l - exp_l**2
-        var_y = var_y - exp_y**2
-
-        ! save initial equilibrium average income if no reform
-        if(.not. ageing_on)INC_init = INC
-
-        ! Output
-        write(21,'(a/)')'STEADY STATE EQUILIBRIUM'
-        write(21,'(a)')'CAPITAL        K       B       rk      rb  rk p.a.  rb p.a.'
-        write(21,'(8x,5f8.2)')KK, BB, rk, rb , ((1d0+rk)**(1d0/5d0)-1d0)*100d0, ((1d0+rb)**(1d0/5d0)-1d0)*100d0 !check
-        write(21,'(a,3f8.2/)')'(in %)  ',(/KK, BB/)/YY*500d0
-
-        write(21,'(a)')'LABOR          L      HH     INC       w'
-        write(21,'(8x,4f8.2/)')LL, HH*100d0, INC, w
-
-        write(21,'(a)')'GOODS          Y       C       I       G    DIFF'
-        write(21,'(8x,4f8.2,f8.3)')YY,CC,II,GG,diff
-        write(21,'(a,4f8.2,f8.3/)')'(in %)  ',(/YY, CC, II, GG, diff/)/YY*100d0
-
-!~         write(21,'(a)')'GOV         TAUC    TAUW    TAUR   TOTAL       G       B'
-!~         write(21,'(8x,6f8.2)')taxrev(1:4),GG,BB
-!~         write(21,'(a,6f8.2)')'(in %)  ',(/taxrev(1:4), GG, BB*5d0/)/YY*100d0
-!~         write(21,'(a,3f8.2/)')'(rate)  ',(/tauc, tauw, taur/)*100d0
-
-        write(21,'(a)')'PENS        TAUP     PEN      PP'
-        write(21,'(8x,6f8.2)')taup*w*LL, pen(JR), PP
-        write(21,'(a,3f8.2/)')'(in %)  ',(/taup, kappa, PP/YY/)*100d0
-
-        ! check for the maximium grid point used
-        call check_grid(iamax)
-
-        write(21, '(a,a)')' IJ      CONS     LABOR  EARNINGS    INCOME    INCTAX      PENS    ASSETS', &
-            '    BONDs    VAR(C)    VAR(L)    VAR(Y)     VALUE     IAMAX'
-        do ij = 1, JJ
-            write(21,'(i3,12f10.3,i10)')ij, c_coh(ij)/INC_init, l_coh(ij), (/w*y_coh(ij), wn*y_coh(ij)+rkn*k_coh(ij), &
-                    tauw*w*y_coh(ij)+taurk*rk*k_coh(ij), pen(ij)-taup*w*y_coh(ij), 5d0*k_coh(ij), 5d0*b_coh(ij)/)/INC_init, &
-                    var_c(ij), var_l(ij), var_y(ij), v_coh(ij), iamax(ij)
+            write(21,'(i3,4f10.3,i10)')ages(ij), c_coh(ij), y_coh(ij), a_coh(ij), o_coh(ij), &
+                    iamax(ij)
         enddo
         write(21,'(a/)')'--------------------------------------------------------------------'
 
+        ! plot output
+        call plot(dble(ages), c_coh, legend='Consumption (Mean)')
+        call plot(dble(ages), y_coh, legend='Labor Income (Mean)')
+        call execplot(xlabel='Age j', ylabel='Consumption/Income', ylim=(/0d0, 4d0/))
+
+        call plot(dble(ages(2:JJ)), o_coh(2:JJ))
+        call execplot(xlabel='Age j', ylabel='Portfolio Share', ylim=(/0d0, 1d0/))
+
+        call plot(dble(ages), a_coh)
+        call execplot(xlabel='Age j', ylabel='Assets')
+
     end subroutine
 
+!##############################################################################
 
-    ! subroutine that checks for the maximum gridpoint used
-    subroutine check_grid(iamax)
+    ! subroutine that checks for the maximum asset gridpoint used
+    subroutine check_grid_a(iamax)
 
         implicit none
-        integer :: iamax(JJ), ij, ik, ib, ip, is
+        integer :: iamax(JJ), ij, ia
 
         iamax = 0
         do ij = 1, JJ
 
             ! check for the maximum asset grid point used at a certain age
-            do ik = 0, NK
-                do ib = 0, NB
-                    do ip = 1, NP
-                        do is = 1, NS
-                            if(phi(ij, ik, ib, ip, is) > 1d-8)iamax(ij) = ik
-                        enddo
-                    enddo
-                enddo
+            do ia = 0, NA
+                if(phi_aplus(ij, ia) > 1d-8)iamax(ij) = ia
             enddo
         enddo
 

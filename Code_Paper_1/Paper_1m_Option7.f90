@@ -12,10 +12,10 @@ module globals
     implicit none
 
     ! number of years the household lives
-    integer, parameter :: JJ = 45
+    integer, parameter :: JJ = 80
     
     ! number of years the household retires
-    integer, parameter :: JR = 80
+    integer, parameter :: JR = 45
 
     ! number of white noise (zeta) shocks
     integer, parameter :: NW = 7
@@ -56,14 +56,14 @@ module globals
 
     ! discretized shocks
     real*8 :: dist_zeta(NW), zeta(NW)
-    real*8 :: pi_eta(NS, NS), eta(NS)
-    real*8 :: pi_Omega(NR, NR), Omega(NR)
+    real*8 :: pi_eta(NE, NE), eta(NE)
+    real*8 :: pi_TProd(NR, NR), TProd(NR)
     integer :: iq_initial = 3, iv_initial = 4
     
     ! production parameters
     real*8, parameter :: alpha = 0.36d0
     real*8, parameter :: delta = 1d0-(1d0-0.0823d0)
-    real*8, parameter :: Omega_bar = 1.60d0
+    real*8, parameter :: TProd_bar = 1.60d0
     
     ! demographic parameters 
     real*8, parameter :: n_p   = 0.01d0 
@@ -82,7 +82,7 @@ module globals
     real*8 :: YY, CC, II, INC
     
     ! wages, transfer payments (old-age) and survival probabilities
-    real*8 :: w(0:NR), wn(0:NR), eff(JJ), pen(JJ, 0:NR), psi(JJ+1)
+    real*8 :: w(0:NR), wn(0:NR), eff(JJ), psi(JJ+1)
 
     ! demographic and other model parameters
     real*8 :: m(JJ)
@@ -93,11 +93,11 @@ module globals
     ! government variables
     real*8 :: tauw
     real*8 :: pen(JJ, 0:NR), taxrev
-    real*8 :: total_pen
+    real*8 :: total_pen, total_INC
 
     ! cohort aggregate variables
     real*8 :: c_coh(JJ), y_coh(JJ), a_coh(JJ), omega_coh(JJ), l_coh(JJ), v_coh(JJ)
-    real*8 :: k_coh(JJ), b_coh(JJ)
+    real*8 :: k_coh(JJ), b_coh(JJ), o_coh(JJ)
     real*8 :: cv_coh(JJ), yv_coh(JJ), av_coh(JJ), ov_coh(JJ), lv_coh(JJ), vv_coh(JJ)
     real*8 :: kv_coh(JJ), bv_coh(JJ)
 
@@ -107,9 +107,9 @@ module globals
     real*8 :: omega_plus(JJ, 0:NA, 0:NE, 0:NR), Q(JJ, 0:NA, 0:NE, 0:NR)
     real*8 :: c(JJ, 0:NA, 0:NO, 0:NE, 0:NW, 0:NR), a_plus(JJ, 0:NA, 0:NO, 0:NE, 0:NW, 0:NR)
     real*8 :: V(JJ, 0:NA, 0:NO, 0:NE, 0:NW, 0:NR) = 0d0
-    real*8 :: phi(JJ, 0:NA, 0:NO, 0:NE, 0:NW, 0:NR)
-    real*8 :: phi_aplus(JJ, 0:NA), phi_aoeO(JJ, 0:NA, 0:NO, 0:NE, 0:NR)
-    real*8 :: phi_eta(JJ, 0:NE), phi_Omega(JJ, 0:NR)
+    real*8 :: phi_ij(JJ, 0:NA, 0:NO, 0:NE, 0:NW, 0:NR)
+    real*8 :: phi_aplus(JJ, 0:NA), phi_aoep(JJ, 0:NA, 0:NO, 0:NE, 0:NR)
+    real*8 :: phi_eta(JJ, 0:NE), phi_Tprod(JJ, 0:NR)
     
     ! numerical variables
     real*8 :: RHS(JJ, 0:NA, 0:NE, 0:NR)
@@ -123,14 +123,14 @@ contains
 
         implicit none
         real*8, intent(in) :: x_in
-        real*8 :: foc_cons, a_plus, varphi, tomorrow, earnings
+        real*8 :: foc_cons, a_plus, varphi, tomorrow, earnings, R_port
         integer :: ial, iar
 
         ! calculate tomorrows assets
         a_plus  = x_in
 
         ! calculate effective labour earnings
-        earnings  = (wn(iv)*eff(ij_com+1)*exp(eta(iq_com) + zeta(ig_com)) &
+        earnings  = wn(iv_com)*eff(ij_com+1)*exp(eta(iq_com) + zeta(ig_com)) &
                     + pen(ij_com, iv_com)
                 
         ! calculate return on next-period portfolio, R
@@ -175,13 +175,13 @@ contains
                     NO, ioml, iomr, varphi)
 
                     ! get distributional weight
-                    dist = dist_zeta(ig)*pi_Omega(iv_com, iv)*pi_eta(iq_com, iq)
+                    dist = dist_zeta(ig)*pi_TProd(iv_com, iv)*pi_eta(iq_com, iq)
 
                     ! calculate consumption and FOC
                     c_p = varphi      *c(ij_com+1, ia_com, ioml, ig, iv, iq) + &
                           (1d0-varphi)*c(ij_com+1, ia_com, iomr, ig, iv, iq)
                     c_p = max(c_p, 1d-10)
-                    foc_port = foc_port + dist*(rk(iv)-rb))*a(ia_com)*margu(c_p)
+                    foc_port = foc_port + dist*(rk(iv)-rb)*a(ia_com)*margu(c_p)
                 enddo
             enddo
         enddo
@@ -207,7 +207,7 @@ contains
     function valuefunc(a_plus, cons, ij, iq, iv)
 
         implicit none
-        integer, intent(in) :: ij
+        integer, intent(in) :: ij, iq, iv
         real*8, intent(in) :: a_plus, cons
         real*8 :: valuefunc, varphi, c_help
         integer :: ial, iar
