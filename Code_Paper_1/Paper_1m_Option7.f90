@@ -28,10 +28,10 @@ module globals
     integer, parameter :: NE = 5
 
     ! number of points on the asset grid
-    integer, parameter :: NA = 200
+    integer, parameter :: NA = 50
 
     ! number of points on the risky share grid
-    integer, parameter :: NO = 200
+    integer, parameter :: NO = 50
 
     ! household preference parameters 
     real*8, parameter :: gamma = 0.10d0 
@@ -105,7 +105,8 @@ module globals
     real*8 :: a(0:NA), omega(0:NO)
     real*8 :: a_bor(JJ)
     real*8 :: omega_plus(JJ, 0:NA, 0:NE, 0:NR), Q(JJ, 0:NA, 0:NE, 0:NR)
-    real*8 :: c(JJ, 0:NA, 0:NO, 0:NE, 0:NW, 0:NR), a_plus(JJ, 0:NA, 0:NO, 0:NE, 0:NW, 0:NR)
+    real*8 :: c(JJ, 0:NA, 0:NO, 0:NE, 0:NW, 0:NR)
+    real*8 :: a_plus(JJ, 0:NA, 0:NO, 0:NE, 0:NW, 0:NR)
     real*8 :: V(JJ, 0:NA, 0:NO, 0:NE, 0:NW, 0:NR) = 0d0
     real*8 :: phi_ij(JJ, 0:NA, 0:NO, 0:NE, 0:NW, 0:NR)
     real*8 :: phi_aplus(JJ, 0:NA), phi_aoep(JJ, 0:NA, 0:NO, 0:NE, 0:NR)

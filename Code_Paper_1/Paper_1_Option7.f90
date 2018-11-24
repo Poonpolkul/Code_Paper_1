@@ -209,21 +209,20 @@ contains
 
         implicit none
         integer :: ij, ia, io, iq, ig, iv
-        real*8 :: k_in, b_in, wage, available
-        real*8 :: a_in(2)
-        logical :: check
         
         ! get decision in the last period of life
-        do ia = 1, NA
-            do io = 1, NO
-                do iq = 1, 1
-                    do ig = 1, 1
-                        do iv = 1, NR
+        omega_plus(JJ, :, :, :) = 0d0
+!~         a_plus(JJ, :, :, :, :, :) = 0d0
+        do ia = 0, NA
+            do io = 0, NO
+                do iq = 0, NE
+                    do ig = 0, NW
+                        do iv = 0, NR
                             a_plus(JJ, ia, io, iq, ig, iv) = 0d0
-                            omega_plus(JJ, ia, iq, iv) = 0d0
                             c(JJ, ia, io, iq, ig, iv) = (1d0 + rb + omega(io)*(rk(iv)-rb))*a(ia) &
                             + pen(JJ, iv)
                             V(JJ, ia, io, iq, ig, iv) = valuefunc(0d0, c(JJ, ia, io, iq, ig, iv), JJ, iq, iv)
+
                         enddo
                     enddo                
                 enddo
