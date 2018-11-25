@@ -28,10 +28,10 @@ module globals
     integer, parameter :: NE = 5
 
     ! number of points on the asset grid
-    integer, parameter :: NA = 50
+    integer, parameter :: NA = 40
 
     ! number of points on the risky share grid
-    integer, parameter :: NO = 50
+    integer, parameter :: NO = 40
 
     ! household preference parameters 
     real*8, parameter :: gamma = 0.10d0 
@@ -77,12 +77,12 @@ module globals
     integer :: iter
 
     ! macroeconomic variables
-    real*8 :: rb, rk(0:NR)
+    real*8 :: rb, rk(NR)
     real*8 :: AA, KK, BB, LL, HH
     real*8 :: YY, CC, II, INC
     
     ! wages, transfer payments (old-age) and survival probabilities
-    real*8 :: w(0:NR), wn(0:NR), eff(JJ), psi(JJ+1)
+    real*8 :: w(NR), wn(NR), eff(JJ), psi(JJ+1)
 
     ! demographic and other model parameters
     real*8 :: m(JJ)
@@ -92,7 +92,7 @@ module globals
 
     ! government variables
     real*8 :: tauw
-    real*8 :: pen(JJ, 0:NR), taxrev
+    real*8 :: pen(JJ, NR), taxrev
     real*8 :: total_pen, total_INC
 
     ! cohort aggregate variables
@@ -104,16 +104,16 @@ module globals
     ! individual variables
     real*8 :: a(0:NA), omega(0:NO)
     real*8 :: a_bor(JJ)
-    real*8 :: omega_plus(JJ, 0:NA, 0:NE, 0:NR), Q(JJ, 0:NA, 0:NE, 0:NR)
-    real*8 :: c(JJ, 0:NA, 0:NO, 0:NE, 0:NW, 0:NR)
-    real*8 :: a_plus(JJ, 0:NA, 0:NO, 0:NE, 0:NW, 0:NR)
-    real*8 :: V(JJ, 0:NA, 0:NO, 0:NE, 0:NW, 0:NR) = 0d0
-    real*8 :: phi_ij(JJ, 0:NA, 0:NO, 0:NE, 0:NW, 0:NR)
-    real*8 :: phi_aplus(JJ, 0:NA), phi_aoep(JJ, 0:NA, 0:NO, 0:NE, 0:NR)
-    real*8 :: phi_eta(JJ, 0:NE), phi_Tprod(JJ, 0:NR)
+    real*8 :: omega_plus(JJ, 0:NA, NE, NR), Q(JJ, 0:NA, NE, NR)
+    real*8 :: c(JJ, 0:NA, 0:NO, NE, NW, NR)
+    real*8 :: a_plus(JJ, 0:NA, 0:NO, NE, NW, NR)
+    real*8 :: V(JJ, 0:NA, 0:NO, NE, NW, NR) = 0d0
+    real*8 :: phi_ij(JJ, 0:NA, 0:NO, NE, NW, NR)
+    real*8 :: phi_aplus(JJ, 0:NA), phi_aoep(JJ, 0:NA, 0:NO, NE, NR)
+    real*8 :: phi_eta(JJ, 0:NE), phi_Tprod(JJ, NR)
     
     ! numerical variables
-    real*8 :: RHS(JJ, 0:NA, 0:NE, 0:NR)
+    real*8 :: RHS(JJ, 0:NA, NE, NR)
     integer :: i, ij_com, ia_com, io_com, iq_com, ig_com, iv_com
     real*8 :: cons_com, lab_com, DIFF, INC_init !do we need INC_init?
 
@@ -168,9 +168,9 @@ contains
         foc_port = 0d0
            
         ! find the portfolio FOC
-        do ig = 1, NW
-            do iv = 1, NR
-                do iq = 1, NE
+        do iq = 1, NE
+            do ig = 1, NW
+                do iv = 1, NR
                     ! derive interpolation weights
                     call linint_Grow(omega_p, omega_l, omega_u, omega_grow, &
                     NO, ioml, iomr, varphi)
@@ -179,8 +179,8 @@ contains
                     dist = dist_zeta(ig)*pi_TProd(iv_com, iv)*pi_eta(iq_com, iq)
 
                     ! calculate consumption and FOC
-                    c_p = varphi      *c(ij_com+1, ia_com, ioml, ig, iv, iq) + &
-                          (1d0-varphi)*c(ij_com+1, ia_com, iomr, ig, iv, iq)
+                    c_p = varphi      *c(ij_com+1, ia_com, ioml, iq, ig, iv) + &
+                          (1d0-varphi)*c(ij_com+1, ia_com, iomr, iq, ig, iv)
                     c_p = max(c_p, 1d-10)
                     foc_port = foc_port + dist*(rk(iv)-rb)*a(ia_com)*margu(c_p)
                 enddo

@@ -41,24 +41,24 @@ contains
 
             ! derive prices
             call prices()
-
+print*, 'Hello 0'
             ! solve the household problem
             call solve_household()
-
+print*, 'Hello 1'
             ! calculate the distribution of households over state space
             call get_distribution()
-
+print*, 'Hello 2'
             ! aggregate individual decisions over cohorts
             call aggregation()
-
+print*, 'Hello 3'
             ! update bond market return
             call bond_return()
-
+print*, 'Hello 4'
             ! determine the government parameters
             call government()
-
-            write(*,'(i4,6f8.2,f12.5)')iter, (/5d0*KK, CC, II/)/YY*100d0, &
-                                       rb, rk, w, DIFF/YY*100d0
+print*, 'Hello 5'
+!~             write(*,'(i4,6f8.2,f12.5)')iter, (/5d0*KK, CC, II/)/YY*100d0, &
+!~                                        rb, rk, w, DIFF/YY*100d0
             if(abs(DIFF/YY)*100d0 < sig)then
                 call toc
                 call output()
@@ -212,28 +212,26 @@ contains
         
         ! get decision in the last period of life
         omega_plus(JJ, :, :, :) = 0d0
-!~         a_plus(JJ, :, :, :, :, :) = 0d0
         do ia = 0, NA
-            do io = 0, NO
-                do iq = 0, NE
-                    do ig = 0, NW
-                        do iv = 0, NR
+            do io = 0, NO !!!!!!!!!!!!!!!!!!
+                do iq = 1, NE
+                    do ig = 1, NW
+                        do iv = 1, NR
                             a_plus(JJ, ia, io, iq, ig, iv) = 0d0
                             c(JJ, ia, io, iq, ig, iv) = (1d0 + rb + omega(io)*(rk(iv)-rb))*a(ia) &
                             + pen(JJ, iv)
                             V(JJ, ia, io, iq, ig, iv) = valuefunc(0d0, c(JJ, ia, io, iq, ig, iv), JJ, iq, iv)
-
                         enddo
                     enddo                
                 enddo
             enddo
         enddo
-       
+print*, 'Solve_household 1'
         ! get decision for other cohorts
         do ij = JJ-1, 1, -1
 
             ! determine optimal portfolio choice for all others
-            do ia = 1, NA
+            do ia = 0, NA
                 do iq = 1, NE
                     do iv = 1, NR
                         ! assign omega = 0 for asset <= 0 (borrow from bond)
@@ -246,28 +244,28 @@ contains
                     enddo
                 enddo
             enddo
-
+print*, 'Solve_household 2'
             ! interpolate individual RHS and value function
             do iq = 1, NE
                 do iv = 1, NR
                     call interpolate(ij, iq, iv)
                 enddo
             enddo
-
+print*, 'Solve_household 3'
 
             ! determine consumption-savings solution
             do ia = 0, NA
                 do io = 0, NO
-                    do iq = 0, NE
-                        do ig = 0, NW
-                            do iv = 0, NR
+                    do iq = 1, NE
+                        do ig = 1, NW
+                            do iv = 1, NR
                                 call solve_consumption(ij, ia, io, iq, ig, iv)
                             enddo
                         enddo
                     enddo
                 enddo
             enddo
-
+print*, 'Solve_household 4'
             write(*,'(a,i3,a)')'Age: ',ij,' DONE!'
         enddo
 
@@ -398,18 +396,18 @@ contains
                     do iq_next = 1, NE
                         ! get return on the portfolio
                         R_port = 1d0 + rb + omega_plus(ij, ia, iq_next, iv_next)*(rk(iv_next) - rb)
-                        
+print*, 'Interpolate 1'                        
                         ! derive interpolation weights
                         call linint_Grow(omega_plus(ij, ia, iq_next, iv_next), omega_l, &
                         omega_u, omega_grow, NO, ioml, iomr, varphi)
-                        
+print*, 'Interpolate 2'                        
                         ! calculate next-period consumption
                         c_p = varphi*c(ij_com+1, ia_com, ioml, iq_next, ig, iv_next) + &
                           (1d0-varphi)*c(ij_com+1, ia_com, iomr, iq_next, ig, iv_next)
-                    
+print*, 'Interpolate 3'                        
                         ! get distributional weight
                         dist = dist_zeta(ig)*pi_Tprod(iv_com, iv_next)*pi_eta(iq_com, iq_next)
-                        
+print*, 'Interpolate 4'                        
                         ! get RHS of foc and Q
                         RHS(ij, ia, iq_com, iv_com) = RHS(ij, ia, iq_com, iv_com) + &
                                             dist*R_port*margu(c_p)
@@ -420,10 +418,11 @@ contains
                     enddo
                 enddo
             enddo
-            
+print*, 'Interpolate 5'                        
             RHS(ij, ia, iq_com, iv_com) = (beta*psi(ij+1)*RHS(ij, ia, iq_com, iv_com))**(-1/gamma)
+print*, 'Interpolate 6'                        
             Q(ij, ia, iq_com, iv_com)   = (egam*Q(ij, ia, iq_com, iv_com))**(1d0/egam)
-
+print*, 'Interpolate 7'                        
         enddo
     end subroutine                    
 
@@ -475,9 +474,9 @@ contains
         ! derive interpolation weights for a+ and assign prob to discrete phi_aplus(ij, ia)
         do ia = 0, NA
             do io = 0, NO
-                do iq = 0, NE
-                    do ig = 0, NW
-                        do iv = 0, NR
+                do iq = 1, NE
+                    do ig = 1, NW
+                        do iv = 1, NR
                             call linint_Grow(a_plus(ij, ia, io, iq, ig, iv), a_l, a_u, a_grow, &
                                  NA, ial, iar, varphi_a)
                                  
@@ -506,9 +505,9 @@ contains
         ! derive distribution of discrete eta and TProd
         do ia = 0, NA
             do io = 0, NO
-                do iq = 0, NE
-                    do ig = 0, NW
-                        do iv = 0, NR
+                do iq = 1, NE
+                    do ig = 1, NW
+                        do iv = 1, NR
                             phi_eta(ij, iq) = phi_eta(ij, iq) + phi_ij(ij, ia, io, iq, ig, iv)
                             phi_Tprod(ij, iv) = phi_Tprod(ij, iv) + phi_ij(ij, ia, io, iq, ig, iv)
                         enddo
@@ -519,8 +518,8 @@ contains
      
         ! derive interpolation weights for omega_plus and joint-distribute
         do ia = 0, NA
-            do iq = 0, NE
-                do iv = 0, NR
+            do iq = 1, NE
+                do iv = 1, NR
                     call linint_Grow(omega_plus(ij, ia, iq, iv), omega_l, &
                         omega_u, omega_grow, NA, ioml, iomr, varphi_o)                
                                  
@@ -547,11 +546,11 @@ contains
         !distribute from phi_aoep to next period cohort across all states
         do ia = 0, NA
             do io = 0, NO
-                do iq = 0, NE
-                    do iq_com = 0, NE
-                        do ig = 0, NW
-                            do iv = 0, NR
-                                do iv_com = 0, NR
+                do iq = 1, NE
+                    do iq_com = 1, NE
+                        do ig = 1, NW
+                            do iv = 1, NR
+                                do iv_com = 1, NR
                                     phi_ij(ij+1, ia, io, iq, ig, iv) = phi_ij(ij+1, ia, io, iq, ig, iv) +&
                                         pi_eta(iq_com, iq)*dist_zeta(ig)*pi_TProd(iv_com, iv)*&
                                         phi_aoep(ij, ia, io, iq_com, iv_com)
@@ -589,9 +588,9 @@ contains
         do ij = 1, JJ
             do ia = 0, NA
                 do io = 0, NO
-                    do iq = 0, NE
-                        do ig = 0, NW
-                            do iv = 0, NR
+                    do iq = 1, NE
+                        do ig = 1, NW
+                            do iv = 1, NR
                                 c_coh(ij) = c_coh(ij) + phi_ij(ij, ia, io, iq, ig, iv)*&
                                     c(ij, ia, io, iq, ig, iv)
                                 l_coh(ij) = l_coh(ij) + phi_ij(ij, ia, io, iq, ig, iv)*&
@@ -637,9 +636,9 @@ contains
         do ij = 1, JJ
             do ia = 0, NA
                 do io = 0, NO
-                    do iq = 0, NE
-                        do ig = 0, NW
-                            do iv = 0, NR
+                    do iq = 1, NE
+                        do ig = 1, NW
+                            do iv = 1, NR
                                 INC = INC + w(iv)*phi_ij(ij, ia, io, iq, ig, iv)*&
                                     eff(ij)*exp(eta(iq) + zeta(ig))
                             enddo
@@ -693,9 +692,9 @@ contains
         
         ! calculate total working income
         do ij = 1, JJ
-            do iq = 0, NE
-                do ig = 0, NW
-                    do iv = 0, NR
+            do iq = 1, NE
+                do ig = 1, NW
+                    do iv = 1, NR
                         total_INC = total_INC + m(ij)*phi_Tprod(ij, iv)*phi_eta(ij, iq)&
                                     *dist_zeta(ig)*w(iv)*eff(ij)*exp(eta(iq) + zeta(ig))
                     enddo
