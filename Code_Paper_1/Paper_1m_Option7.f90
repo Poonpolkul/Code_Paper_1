@@ -144,10 +144,6 @@ contains
             R_port = 1d0 + rb + omega(io_com)*(rk(iv_com) - rb)
         endif
         
-if (ia_com >= NA/2) then
-print*, 'earnings', earnings, 'R_port, a', R_port, a(ia_com), 'a_plus', a_plus, &
-'total resource', earnings + R_port*a(ia_com)
-endif
         ! calculate current consumption 
         cons_com = R_port*a(ia_com) + earnings - a_plus
         

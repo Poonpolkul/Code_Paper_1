@@ -111,15 +111,9 @@ contains
         ! calculate the shock process for aggregate productivity (TProd)
         call discretize_AR(rho, TProd_bar, sigma_vtheta, TProd, pi_TProd)
 
-!~ do iv = 1, NR
-!~ print*, 'TProd(iv)', TProd(iv)
-!~ enddo
-
         ! calculate the shock process for eta
         call discretize_AR(rho, 0d0, sigma_eps, eta, pi_eta)
         eta = exp(eta)
-!~ print*, 'pi_eta', pi_eta
-!~ print*, 'pi_TProd', pi_TProd
 
         ! initialize asset grid
         call grid_Cons_Equi(a, a_l, a_u)
@@ -152,36 +146,33 @@ contains
         ! calculate wage rate
         do iv = 1, NR
             w(iv) = TProd(iv)*(1d0-alpha)*(KK/LL)**alpha
-!~ print*, 'w', w(iv)
+
         enddo
 
         ! calculate return on risky asset
         do iv = 1, NR
             rk(iv) = (TProd(iv)*KK**alpha*LL**(1d0-alpha)-w(iv)*LL)/KK
-print*, 'rk', rk(iv)
+
         enddo
        
         if (iter==1) then
             rb = 0
             do iv = 1, NR
                 rb = rb + (rk(iv)-mu_r)/NR
-print*, 'rb', rb
             enddo
-print*, 'rb_end', rb
+
         endif
 
        
         ! calculate after-tax wage rate
         do iv = 1, NR
             wn(iv) = w(iv)*(1d0-tauw)
-print*, 'wn(iv)', wn(iv)
         enddo
         
         ! old-age transfers
         pen(:,:) = 0d0
         do iv = 1, NR
             pen(JR:JJ, iv) = max(kappa*w(iv)*eff(JR-1), 1d-10)
-print*, 'pension iv', pen(JJ, iv)
         enddo
         
         ! endogenous lower bound for asset
@@ -196,7 +187,6 @@ print*, 'pension iv', pen(JJ, iv)
             ! set maximum of natural and exogenous borrowing constraint
             a_bor(ij) = -abor_temp/(1d0+rb)
 
-print*, 'abor' ,a_bor(ij)
         enddo
 
 !~ stop
@@ -221,25 +211,14 @@ print*, 'abor' ,a_bor(ij)
                             c(JJ, ia, io, iq, ig, iv) = max((1d0 + rb + omega(io)*(rk(iv)-rb))*a(ia) &
                             + pen(JJ, iv), 1d-10)
                             V(JJ, ia, io, iq, ig, iv) = valuefunc(0d0, c(JJ, ia, io, iq, ig, iv), JJ, iq, iv)
-print*, 'ia, io, iq, ig, iv', ia, io, iq, ig, iv, 'ValueFunction', &
-V(JJ, ia, io, iq, ig, iv), 'Consumption', c(JJ, ia, io, iq, ig, iv)
                         enddo
                     enddo                
                 enddo
             enddo
         enddo
-print*, 'Solve_household 1'
+
         ! get decision for other cohorts
         do ij = JJ-1, 1, -1
-
-!##############################################################################
-!~ if (ij == 9) then
-!~     stop
-!~ endif
-!##############################################################################
-print*,'!##############################################################################'
-print*, 'solve portfolio'
-print*,'!##############################################################################'
 
             ! determine optimal portfolio choice for all others
             do ia = 0, NA
@@ -255,11 +234,6 @@ print*,'!#######################################################################
                     enddo
                 enddo
             enddo
-stop
-
-print*,'!##############################################################################'
-print*, 'Interpolate'
-print*,'!##############################################################################'
 
             ! interpolate individual RHS and value function
             do iq = 1, NE
@@ -267,10 +241,6 @@ print*,'!#######################################################################
                     call interpolate(ij, iq, iv)
                 enddo
             enddo
-
-print*,'!##############################################################################'
-print*, 'solve consumption'
-print*,'!##############################################################################'
 
             ! determine consumption-savings solution
             do ia = 0, NA
@@ -284,11 +254,8 @@ print*,'!#######################################################################
                     enddo
                 enddo
             enddo
-print*, 'Solve_household 4'
             write(*,'(a,i3,a)')'Age: ',ij,' DONE!'
             
-stop
-
         enddo
 
     end subroutine
@@ -314,15 +281,14 @@ stop
         port1 = foc_port(1d0)
 
         ! use intermediate value theorem
-!~         if(port0*port1 > 0d0)then
-!~             if(abs(port0) > abs(port1))then
-!~                 omega_plus(ij, ia, iq, iv) = 1d0
-!~             else
-!~                 omega_plus(ij, ia, iq, iv) = 0d0
-!~             endif
-!~ print*, ij, ia, iq, iv, 'port0', port0, 'port1', port1, (port0*port1 > 0d0), 'omega_plus', omega_plus(ij, ia, iq, iv)
-!~             return
-!~         else
+        if(port0*port1 > 0d0)then
+            if(abs(port0) > abs(port1))then
+                omega_plus(ij, ia, iq, iv) = 1d0
+            else
+                omega_plus(ij, ia, iq, iv) = 0d0
+            endif
+            return
+        else
 
             ! get order of magnitude of foc
             tolerance = 1d-5*abs(port0-port1)
@@ -338,12 +304,11 @@ stop
 
             ! write screen output in case of a problem
             if(check)write(*,'(a, 4i4)')'ERROR IN ROOTFINDING PORT : ', ij, ia, iq, iv
-print*, 'omega_plus(ij, ia, iq, iv)', x_in
             omega_plus(ij, ia, iq, iv) = x_in
 
             ! reset tolerance level to original value
             call settol_root(1d-8)
-!~         endif
+        endif
     end subroutine
 
 !##############################################################################
@@ -379,19 +344,15 @@ print*, 'omega_plus(ij, ia, iq, iv)', x_in
         ! solve the household problem using rootfinding
         call fzero(x_in, foc_cons, check)
         
-!~ print*,ij, ia, io, iq, ig, iv
 
         ! write screen output in case of a problem
         if(check)write(*,'(a, 2i4)')'ERROR IN ROOTFINDING CONS : ', ij, ia, io, iq, ig, iv
-print*, ij, ia, io, iq, ig, iv, 'consumption', cons_com, 'aplus', x_in
 
         ! check for borrowing constraint
         if(x_in < a_bor(ij_com))then
             cons_com = cons_com + x_in - a_bor(ij_com)
             x_in = a_bor(ij_com)
         endif
-
-print*, ij, ia, io, iq, ig, iv, 'consumption', cons_com, 'aplus', x_in, 'abor', a_bor(ij_com)
 
         ! copy decisions
         a_plus(ij, ia, io, iq, ig, iv) = x_in
@@ -428,22 +389,15 @@ print*, ij, ia, io, iq, ig, iv, 'consumption', cons_com, 'aplus', x_in, 'abor', 
                         call linint_Grow(omega_plus(ij, ia, iq_com, iv_com), omega_l, &
                         omega_u, omega_grow, NO, ioml, iomr, varphi)
 
-!~ print*, 'varphi', ij, ia, ig, iv_next, iq_next, varphi
-
                         ! calculate next-period consumption
                         c_p = varphi*c(ij_com+1, ia_com, ioml, iq_next, ig, iv_next) + &
                           (1d0-varphi)*c(ij_com+1, ia_com, iomr, iq_next, ig, iv_next)
-
-!~ print*, 'cleft', c(ij_com+1, ia_com, ioml, iq_next, ig, iv_next), &
-!~ 'cright', c(ij_com+1, ia_com, iomr, iq_next, ig, iv_next)
 
                         ! get distributional weight
                         dist = dist_zeta(ig)*pi_Tprod(iv_com, iv_next)*pi_eta(iq_com, iq_next)
 
                         ! get RHS of foc and Q
                         c_p = max(c_p, 1d-10)
-                        
-!~ print*, 'interpolate. next period consumption', c_p
 
                         RHS(ij, ia, iq_com, iv_com) = RHS(ij, ia, iq_com, iv_com) + &
                                             dist*R_port*margu(c_p)
