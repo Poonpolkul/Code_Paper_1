@@ -12,10 +12,10 @@ module globals
     implicit none
 
     ! number of years the household lives
-    integer, parameter :: JJ = 80
+    integer, parameter :: JJ = 12
     
     ! number of years the household retires
-    integer, parameter :: JR = 45
+    integer, parameter :: JR = 10
 
     ! number of white noise (zeta) shocks
     integer, parameter :: NW = 7
@@ -34,15 +34,15 @@ module globals
     integer, parameter :: NO = 40
 
     ! household preference parameters 
-    real*8, parameter :: gamma = 0.10d0 
-    real*8, parameter :: beta  = 0.96d0
+    real*8, parameter :: gamma = 0.50d0  !#####################
+    real*8, parameter :: beta  = 0.98**5
     real*8, parameter :: egam = 1d0 - 1d0/gamma
     
     ! household risk process
     real*8, parameter :: sigma_zeta   = 0.0738d0
     real*8, parameter :: sigma_eps    = 0.05d0
-    real*8, parameter :: sigma_vtheta = 0.157d0**2d0 !Need new value
-    real*8, parameter :: rho         = 0.98d0
+    real*8, parameter :: sigma_vtheta = 0.157d0**2d0 !0.00016d0!HM!#####################
+    real*8, parameter :: rho         = 0.75d0 !from HM #####################
     
     ! size of the asset grid
     real*8, parameter :: a_l    = -500.0d0
@@ -50,20 +50,23 @@ module globals
     real*8, parameter :: a_grow = 0.04d0
 
     ! size of risky share grid
-    real*8, parameter :: omega_l    = 0.0d0
-    real*8, parameter :: omega_u    = 1.0d0
+    real*8, parameter :: omega_l    = -10.0d0 !#####################
+    real*8, parameter :: omega_u    = 10.0d0 !#####################
     real*8, parameter :: omega_grow = 0.04d0
+
+    ! initial risk premium
+    real*8, parameter :: mu_r = 0.1d0 !discrete ##########
 
     ! discretized shocks
     real*8 :: dist_zeta(NW), zeta(NW)
     real*8 :: pi_eta(NE, NE), eta(NE)
     real*8 :: pi_TProd(NR, NR), TProd(NR)
-    integer :: iq_initial = 3, iv_initial = 4
+    integer :: iq_initial = (NE+1)/2, iv_initial = (NR+1)/2
     
     ! production parameters
-    real*8, parameter :: alpha = 0.36d0
-    real*8, parameter :: delta = 1d0-(1d0-0.0823d0)
-    real*8, parameter :: TProd_bar = 1.60d0
+    real*8, parameter :: alpha = 0.36d0 !#####################
+    real*8, parameter :: delta = 1d0-(1d0-0.0823d0)**5  !#####################
+    real*8, parameter :: TProd_bar = 1.2d0 !#####################
     
     ! demographic parameters 
     real*8, parameter :: n_p   = 0.01d0 
@@ -131,12 +134,20 @@ contains
         a_plus  = x_in
 
         ! calculate effective labour earnings
-        earnings  = wn(iv_com)*eff(ij_com+1)*exp(eta(iq_com) + zeta(ig_com)) &
+        earnings  = wn(iv_com)*eff(ij_com)*exp(eta(iq_com) + zeta(ig_com)) &
                     + pen(ij_com, iv_com)
                 
         ! calculate return on next-period portfolio, R
-        R_port = 1d0 + rb + omega(io_com)*(rk(iv_com) - rb)
-
+        if (a_plus <= 0) then
+            R_port = rb
+        else 
+            R_port = 1d0 + rb + omega(io_com)*(rk(iv_com) - rb)
+        endif
+        
+if (ia_com >= NA/2) then
+print*, 'earnings', earnings, 'R_port, a', R_port, a(ia_com), 'a_plus', a_plus, &
+'total resource', earnings + R_port*a(ia_com)
+endif
         ! calculate current consumption 
         cons_com = R_port*a(ia_com) + earnings - a_plus
         
@@ -167,14 +178,13 @@ contains
 
         foc_port = 0d0
            
+        ! derive interpolation weights
+        call linint_Grow(omega_p, omega_l, omega_u, omega_grow, NO, ioml, iomr, varphi)
+                    
         ! find the portfolio FOC
         do iq = 1, NE
             do ig = 1, NW
                 do iv = 1, NR
-                    ! derive interpolation weights
-                    call linint_Grow(omega_p, omega_l, omega_u, omega_grow, &
-                    NO, ioml, iomr, varphi)
-
                     ! get distributional weight
                     dist = dist_zeta(ig)*pi_TProd(iv_com, iv)*pi_eta(iq_com, iq)
 
