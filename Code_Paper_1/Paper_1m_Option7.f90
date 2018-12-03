@@ -18,14 +18,14 @@ module globals
     integer, parameter :: JR = 10
 
     ! number of white noise (zeta) shocks
-    integer, parameter :: NW = 7
+    integer, parameter :: NW = 1 !7
 
     ! number of rate of return (vtheta) shocks 
     ![in our paper = aggregate productivity shock]
     integer, parameter :: NR = 7
     
     ! number of eta shocks
-    integer, parameter :: NE = 5
+    integer, parameter :: NE = 1 !5
 
     ! number of points on the asset grid
     integer, parameter :: NA = 40
@@ -34,15 +34,15 @@ module globals
     integer, parameter :: NO = 40
 
     ! household preference parameters 
-    real*8, parameter :: gamma = 0.50d0  !#####################
+    real*8, parameter :: gamma = 0.1d0  !#####################
     real*8, parameter :: beta  = 0.98**5
     real*8, parameter :: egam = 1d0 - 1d0/gamma
     
     ! household risk process
-    real*8, parameter :: sigma_zeta   = 0.0738d0
-    real*8, parameter :: sigma_eps    = 0.05d0
-    real*8, parameter :: sigma_vtheta = 0.157d0**2d0 !0.00016d0!HM!#####################
-    real*8, parameter :: rho         = 0.75d0 !from HM #####################
+    real*8, parameter :: sigma_zeta   = 5d0*0.0738d0
+    real*8, parameter :: sigma_eps    = 5d0*0.0106d0
+    real*8, parameter :: sigma_vtheta = 0.007d0*sqrt(20d0) !from HM !sqrt(5d0)*(0.157d0**2d0) !0.00016d0!HM!#####################
+    real*8, parameter :: rho         = 0.95d0 !from HM #####################
     
     ! size of the asset grid
     real*8, parameter :: a_l    = -500.0d0
@@ -55,14 +55,15 @@ module globals
     real*8, parameter :: omega_grow = 0.04d0
 
     ! initial risk premium
-    real*8, parameter :: mu_r = 0.1d0 !discrete ##########
+    real*8, parameter :: mu_r = 0.2d0 !discrete ##########
 
     ! discretized shocks
     real*8 :: dist_zeta(NW), zeta(NW)
     real*8 :: pi_eta(NE, NE), eta(NE)
     real*8 :: pi_TProd(NR, NR), TProd(NR)
-    integer :: iq_initial = (NE+1)/2, iv_initial = (NR+1)/2
-    
+    integer :: iq_initial = 1, iv_initial = 1
+!~     integer :: iq_initial = (NE+1)/2, iv_initial = (NR+1)/2
+
     ! production parameters
     real*8, parameter :: alpha = 0.36d0 !#####################
     real*8, parameter :: delta = 1d0-(1d0-0.0823d0)**5  !#####################
@@ -138,18 +139,23 @@ contains
                     + pen(ij_com, iv_com)
                 
         ! calculate return on next-period portfolio, R
-        if (a_plus <= 0) then
-            R_port = rb
-        else 
+!~         if (a_plus <= 0) then
+!~             R_port = rb
+!~         else 
             R_port = 1d0 + rb + omega(io_com)*(rk(iv_com) - rb)
-        endif
+!~         endif
         
+!~ if (ia_com >= NA/2) then
+print*, 'earnings:', earnings, 'R_port:', R_port, 'a:', a(ia_com), 'a_plus:', a_plus, &
+'total resource:', earnings + R_port*a(ia_com)
+!~ endif
         ! calculate current consumption 
         cons_com = R_port*a(ia_com) + earnings - a_plus
         
         ! calculate linear interpolation for future part of first order condition
-        call linint_Grow(a_plus, a_l, a_u, a_grow, &
-                    NA, ial, iar, varphi)
+        call linint_Equi(a_plus, a_l, a_u, NA, ial, iar, varphi)
+        
+print*, '****************** ial, iar, varphi:', ial, iar, varphi        
         
         tomorrow = varphi*RHS(ij_com, ial, iq_com, iv_com) + &
                    (1d0-varphi)*RHS(ij_com, iar, iq_com, iv_com)
@@ -175,7 +181,7 @@ contains
         foc_port = 0d0
            
         ! derive interpolation weights
-        call linint_Grow(omega_p, omega_l, omega_u, omega_grow, NO, ioml, iomr, varphi)
+        call linint_Equi(omega_p, omega_l, omega_u, NO, ioml, iomr, varphi)
                     
         ! find the portfolio FOC
         do iq = 1, NE
@@ -183,7 +189,10 @@ contains
                 do iv = 1, NR
                     ! get distributional weight
                     dist = dist_zeta(ig)*pi_TProd(iv_com, iv)*pi_eta(iq_com, iq)
-
+!~ print*, 'states:', ij_com, ia_com, iq, ig, iv, 'cleft',&
+!~  c(ij_com+1, ia_com, ioml, iq, ig, iv),&
+!~ 'cright', c(ij_com+1, ia_com, iomr, iq, ig, iv),&
+!~ 'dist', dist, 'omega:', omega_p
                     ! calculate consumption and FOC
                     c_p = varphi      *c(ij_com+1, ia_com, ioml, iq, ig, iv) + &
                           (1d0-varphi)*c(ij_com+1, ia_com, iomr, iq, ig, iv)
@@ -192,6 +201,8 @@ contains
                 enddo
             enddo
         enddo
+
+!~ print*, 'states ij, ia, iq, iv:', ij_com, ia_com, iq_com, iv_com, 'omega:', omega_p, 'foc_port', foc_port
 
     end function
 
@@ -223,7 +234,7 @@ contains
         c_help = max(cons, 1d-10)
 
         ! get tomorrows utility
-        call linint_Grow(a_plus, a_l, a_u, a_grow, NA, ial, iar, varphi)
+        call linint_Equi(a_plus, a_l, a_u, NA, ial, iar, varphi)
 
         ! calculate tomorrow's part of the value function
         valuefunc = 0d0
