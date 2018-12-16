@@ -34,7 +34,7 @@ module globals
     integer, parameter :: NO = 40
 
     ! household preference parameters 
-    real*8, parameter :: gamma = 0.1d0  !#####################
+    real*8, parameter :: gamma = 0.5d0  !#####################
     real*8, parameter :: beta  = 0.98**5
     real*8, parameter :: egam = 1d0 - 1d0/gamma
     
@@ -50,8 +50,8 @@ module globals
     real*8, parameter :: a_grow = 0.04d0
 
     ! size of risky share grid
-    real*8, parameter :: omega_l    = -10.0d0 !#####################
-    real*8, parameter :: omega_u    = 10.0d0 !#####################
+    real*8, parameter :: omega_l    = 0.0d0 !#####################
+    real*8, parameter :: omega_u    = 1.0d0 !#####################
     real*8, parameter :: omega_grow = 0.04d0
 
     ! initial risk premium
@@ -75,7 +75,7 @@ module globals
     ! simulation parameters
     real*8, parameter :: damp    = 0.30d0
     real*8, parameter :: sig     = 1d-4
-    integer, parameter :: itermax = 50
+    integer, parameter :: itermax = 1
 
     ! counter variables
     integer :: iter
@@ -146,8 +146,8 @@ contains
 !~         endif
         
 !~ if (ia_com >= NA/2) then
-print*, 'earnings:', earnings, 'R_port:', R_port, 'a:', a(ia_com), 'a_plus:', a_plus, &
-'total resource:', earnings + R_port*a(ia_com)
+!print*, 'earnings:', earnings, 'R_port:', R_port, 'a:', a(ia_com), 'a_plus:', a_plus, &
+!'total resource:', earnings + R_port*a(ia_com)
 !~ endif
         ! calculate current consumption 
         cons_com = R_port*a(ia_com) + earnings - a_plus
@@ -155,7 +155,7 @@ print*, 'earnings:', earnings, 'R_port:', R_port, 'a:', a(ia_com), 'a_plus:', a_
         ! calculate linear interpolation for future part of first order condition
         call linint_Equi(a_plus, a_l, a_u, NA, ial, iar, varphi)
         
-print*, '****************** ial, iar, varphi:', ial, iar, varphi        
+!print*, '****************** ial, iar, varphi:', a_plus,ial, iar, varphi        
         
         tomorrow = varphi*RHS(ij_com, ial, iq_com, iv_com) + &
                    (1d0-varphi)*RHS(ij_com, iar, iq_com, iv_com)
@@ -178,6 +178,8 @@ print*, '****************** ial, iar, varphi:', ial, iar, varphi
         ! store portfolio share
         omega_p  = p
 
+!        print*, 'omega_p', omega_p
+        
         foc_port = 0d0
            
         ! derive interpolation weights
@@ -189,20 +191,24 @@ print*, '****************** ial, iar, varphi:', ial, iar, varphi
                 do iv = 1, NR
                     ! get distributional weight
                     dist = dist_zeta(ig)*pi_TProd(iv_com, iv)*pi_eta(iq_com, iq)
-!~ print*, 'states:', ij_com, ia_com, iq, ig, iv, 'cleft',&
-!~  c(ij_com+1, ia_com, ioml, iq, ig, iv),&
-!~ 'cright', c(ij_com+1, ia_com, iomr, iq, ig, iv),&
-!~ 'dist', dist, 'omega:', omega_p
+!print*, 'states:', ij_com, ia_com, iq, ig, iv, 'cleft',&
+! c(ij_com+1, ia_com, ioml, iq, ig, iv),&
+!'cright', c(ij_com+1, ia_com, iomr, iq, ig, iv),&
+!'dist', dist, 'omega:', omega_p
                     ! calculate consumption and FOC
                     c_p = varphi      *c(ij_com+1, ia_com, ioml, iq, ig, iv) + &
                           (1d0-varphi)*c(ij_com+1, ia_com, iomr, iq, ig, iv)
+                   !print*, 'iq, ig, iv:', iq, ig, iv, 'c_p',c_p,'varphi',varphi,
+                   
+!                   print*, 'iq, ig, iv:', iq, ig, iv, 'c_p',c_p, 'varphi',varphi,&
+!                   'cleft', c(ij_com+1, ia_com, ioml, iq, ig, iv),'cright', c(ij_com+1, ia_com, iomr, iq, ig, iv), ioml
                     c_p = max(c_p, 1d-10)
                     foc_port = foc_port + dist*(rk(iv)-rb)*a(ia_com)*margu(c_p)
                 enddo
             enddo
         enddo
 
-!~ print*, 'states ij, ia, iq, iv:', ij_com, ia_com, iq_com, iv_com, 'omega:', omega_p, 'foc_port', foc_port
+!print*, 'states ij, ia, iq, iv:', ij_com, ia_com, iq_com, iv_com, 'omega:', omega_p, 'foc_port', foc_port
 
     end function
 
@@ -246,5 +252,6 @@ print*, '****************** ial, iar, varphi:', ial, iar, varphi
         valuefunc = c_help**egam/egam + beta*psi(ij+1)*valuefunc
 
     end function
+    
 
 end module

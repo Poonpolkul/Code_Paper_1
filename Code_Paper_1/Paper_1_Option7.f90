@@ -112,6 +112,7 @@ zeta(1) = 0d0
 dist_zeta(1) = 1d0
         ! calculate the shock process for aggregate productivity (TProd)
         call discretize_AR(rho, TProd_bar, sigma_vtheta, TProd, pi_TProd)
+        TProd=exp(TProd)
 
 !~         ! calculate the shock process for eta
 !~         call discretize_AR(rho, 0d0, sigma_eps, eta, pi_eta)
@@ -160,6 +161,7 @@ print*, 'zeta, eta, pi_eta', zeta, eta, pi_eta
         ! calculate return on risky asset
         do iv = 1, NR
             rk(iv) = (TProd(iv)*KK**alpha*LL**(1d0-alpha)-w(iv)*LL)/KK
+print*, 'iv', iv,',TProd',TProd(iv)
 print*, 'rk', rk(iv)
         enddo
        
@@ -226,14 +228,14 @@ print*,'!#######################################################################
                             a_plus(JJ, ia, io, iq, ig, iv) = 0d0
                             c(JJ, ia, io, iq, ig, iv) = max((1d0 + rb + omega(io)*(rk(iv)-rb))*a(ia) &
                             + pen(JJ, iv), 1d-10)
-!~ print*, JJ, ia, io, iq, ig, iv, c(JJ, ia, io, iq, ig, iv)
+!print*, JJ, ia, io, iq, ig, iv, c(JJ, ia, io, iq, ig, iv)
                             V(JJ, ia, io, iq, ig, iv) = valuefunc(0d0, c(JJ, ia, io, iq, ig, iv), JJ, iq, iv)
                         enddo
                     enddo                
                 enddo
             enddo
         enddo
-!~ stop
+        
 print*,'!##############################################################################'
 print*, 'solve portfolio'
 print*,'!##############################################################################'
@@ -243,14 +245,20 @@ print*,'!#######################################################################
         do ij = JJ-1, 1, -1
 
             ! determine optimal portfolio choice for all others
-            do ia = 0, NA
+            do ia = 0, NA/2            
+                omega_plus(ij, ia, :, :) = 0d0
+            enddo
+            
+            do ia = NA/2+1, NA
                 do iq = 1, NE
                     do iv = 1, NR
                         call solve_portfolio(ij, ia, iq, iv)
                     enddo
                 enddo
             enddo
-
+            
+            !stop
+            
 print*,'!##############################################################################'
 print*, 'Interpolate'
 print*,'!##############################################################################'
@@ -280,11 +288,10 @@ print*,'!#######################################################################
             enddo
 
             write(*,'(a,i3,a)')'Age: ',ij,' DONE!'
-
-stop
-
+            
+ !          if(ij==11) stop
+            
         enddo
-stop
     end subroutine
 
 !##############################################################################
@@ -306,29 +313,34 @@ stop
         ! check for corner solutions
         port0 = foc_port(0d0)
         port1 = foc_port(1d0)
-print*, 'port0:', port0, 'port1:', port1
+! print*, 'port0:', port0, 'port1:', port1
             ! get order of magnitude of foc
-            tolerance = 1d-5*abs(port0-port1)
-            tolerance = min(tolerance, 1d-8)
-            call settol_root(tolerance)
+!            tolerance = 1d-5*abs(port0-port1)
+!            tolerance = min(tolerance, 1d-8)
+!            call settol_root(tolerance)
 
             ! get best guess for the root of foc_port
             x_in = 0.5d0 !-port0/(port1-port0)
             check = .false.
 
             ! solve the household problem using rootfinding
-            call fzero(x_in, foc_port, check)
-
+            
+            
+           ! call fzero(x_in, foc_port, check)
+            call bisection(x_in, 0d0, 1d0, foc_port)
+            
             ! write screen output in case of a problem
-            if(check)write(*,'(a, 4i4)')'ERROR IN ROOTFINDING PORT : ', ij, ia, iq, iv
+ !           if(check)write(*,'(a, 4i4)')'ERROR IN ROOTFINDING PORT : ', ij, ia, iq, iv, x_in
 
 !~ print*,'!##############################################################################'
-print*, 'states:', ij_com, ia_com, iq, iv,'omega_plus:', x_in
-
+!            if(ij==11) then
+!            print*, 'states:', ij_com, ia_com, iq, iv,'omega_plus:', x_in
+!            endif
+            
             omega_plus(ij, ia, iq, iv) = x_in
 
             ! reset tolerance level to original value
-            call settol_root(1d-8)
+!            call settol_root(1d-8)
 !~         endif
     end subroutine
 
@@ -340,6 +352,7 @@ print*, 'states:', ij_com, ia_com, iq, iv,'omega_plus:', x_in
         implicit none
         integer, intent(in) :: ij, ia, io, iq, ig, iv
         real*8 :: x_in
+        real*8 :: R_port
         logical :: check
 
 !~         ! determine decision for zero cash-on-hand
@@ -362,12 +375,17 @@ print*, 'states:', ij_com, ia_com, iq, iv,'omega_plus:', x_in
         x_in = a_plus(ij+1, ia, io, iq, ig, iv)
         check = .false.
 
+        R_port = 1d0 + rb + omega(io_com)*(rk(iv_com) - rb)
+
         ! solve the household problem using rootfinding
-        call fzero(x_in, foc_cons, check)
+ !       call fzero(x_in, foc_cons, check)
+        call bisection(x_in, a_l, a_u, foc_cons)
+ !       if(ij==11 .AND. ia==1) stop
         
         ! write screen output in case of a problem
-        if(check)write(*,'(a, 2i4)')'ERROR IN ROOTFINDING CONS : ', ij, ia, io, iq, ig, iv
-print*, ij, ia, io, iq, ig, iv, ': consumption', cons_com, 'aplus', x_in
+!        if(check)write(*,'(a, 2i4)')'ERROR IN ROOTFINDING CONS : ', ij, ia, io, iq, ig, iv
+       print*, ij, ia, io, iq, ig, iv, 'R_port=',R_port,'x_in', x_in, 'consumption', cons_com!, 'aplus', x_in
+ !      if(ij==11 .AND. ia==40) stop
 
         ! check for borrowing constraint
         if(x_in < a_bor(ij_com))then
@@ -375,7 +393,7 @@ print*, ij, ia, io, iq, ig, iv, ': consumption', cons_com, 'aplus', x_in
             x_in = a_bor(ij_com)
         endif
 
-print*, ij, ia, io, iq, ig, iv, 'consumption', cons_com, 'aplus', x_in, 'abor', a_bor(ij_com)
+!print*, ij, ia, io, iq, ig, iv, 'consumption', cons_com, 'aplus', x_in, 'abor', a_bor(ij_com)
 
         ! copy decisions
         a_plus(ij, ia, io, iq, ig, iv) = x_in
@@ -412,7 +430,7 @@ print*, ij, ia, io, iq, ig, iv, 'consumption', cons_com, 'aplus', x_in, 'abor', 
                         call linint_Equi(omega_plus(ij, ia, iq_com, iv_com), omega_l, &
                         omega_u, NO, ioml, iomr, varphi)
 !~ print*, 'omega_plus(ij, ia, iq_com, iv_com', omega_plus(ij, ia, iq_com, iv_com)
-!~ print*, 'varphi', ij, ia, ig, iq_com, iv_com, varphi
+! print*, 'varphi', ij, ia, ig, iq_com, iv_com, varphi
 
                         ! calculate next-period consumption
                         c_p = varphi*c(ij_com+1, ia, ioml, iq_next, ig, iv_next) + &
@@ -440,7 +458,7 @@ print*, ij, ia, io, iq, ig, iv, 'consumption', cons_com, 'aplus', x_in, 'abor', 
             enddo
 
             RHS(ij, ia, iq_com, iv_com) = (beta*psi(ij+1)*RHS(ij, ia, iq_com, iv_com))**(-gamma)
-print*, ij, ia, iq_com, iv_com, '******************  RHS', RHS(ij, ia, iq_com, iv_com)
+!print*, ij, ia, iq_com, iv_com, '******************  RHS', RHS(ij, ia, iq_com, iv_com)
         enddo
 
     end subroutine                    
@@ -779,5 +797,75 @@ print*, ij, ia, iq_com, iv_com, '******************  RHS', RHS(ij, ia, iq_com, i
         enddo
 
     end subroutine
+    
+        ! bisection root-finding
+    subroutine bisection(x, lb, ub, funcv)
+    
+    implicit none    
+    real*8, intent(inout) :: x 
+    real*8, intent(in) :: lb, ub    
+    integer :: iter
+    real*8 :: a, b, fx, fa, fb
+    
+    ! interface for the function
+    interface
+        function funcv(p)
+            implicit none
+            real*8, intent(in) :: p
+            real*8 :: funcv
+        end function funcv
+    end interface
 
+    ! set initial guesses and function values
+    a = lb
+    b = ub
+    fa = funcv(a)
+    fb = funcv(b)
+
+    ! check whether there is a root in [a,b]
+    if(fa<=0d0 .AND. fb<=0d0)then
+        if(fa<=fb) then
+            x=1d0
+        else
+            x=0d0
+        endif
+        return
+    endif
+    
+    if(fa>=0d0 .AND. fb>=0d0)then
+        if(fa<=fb) then
+            x=1d0
+        else
+            x=0d0
+        endif
+        return
+    endif
+
+    ! start iteration process
+    do iter = 1, 200
+
+        ! calculate new bisection point and function value
+        x = (a+b)/2d0
+        fx = funcv(x)
+
+ !       write(*,'(i4,f12.7)')iter, abs(x-a)
+
+        ! check for convergence
+        if(abs(x-a) < 1d-6)then
+ !           write(*,'(/a,f12.7,a,f12.9)')' x = ',x,'    f = ',fx
+            return
+        endif
+
+        ! calculate new interval
+        if(fa*fx < 0d0)then
+            b = x
+            fb = fx
+        else
+            a = x
+            fa = fx
+        endif
+    enddo
+    
+    end subroutine
+    
 end program
