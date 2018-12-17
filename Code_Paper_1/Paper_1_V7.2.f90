@@ -29,6 +29,7 @@ program PortfolioChoice
     ! iterate until value function converges
     do iter = 1, itermax
 
+Print*, ' ################### iteration =', iter, '###################'
         ! derive prices
         call prices()
 
@@ -37,16 +38,16 @@ program PortfolioChoice
 
         ! calculate the distribution of households over state space
         call get_distribution()
-
+print*, 'hello1'
         ! aggregate individual decisions
         call aggregation()
-
+print*, 'hello2'
         ! update bond market return
         call bond_return()
-
+print*, 'hello3'
         ! determine the government parameters
         call government()
-
+print*, 'hello4'
         if(abs(DIFF/YY)*100d0 < sig)then
             call toc
             call output()
@@ -153,16 +154,14 @@ contains
 print*, 'rk', rk(ir)
         enddo
        
-!~         if (iter==1) then
+        if (iter==1) then
             rb = 0
             do ir = 1, NR
                 rb = rb + (rk(ir)-mu_r)/NR
 print*, 'rb', rb
-
             enddo
-print*, 'rb_end', rb
-!~         endif
-       
+        endif
+print*, 'rb_end', rb       
         ! calculate after-tax wage rate
         do ir = 1, NR
             wn(ir) = w(ir)*(1d0-tauw)
@@ -601,10 +600,11 @@ print*, 'pension iv', pen(JJ, ir)
                 endif
                 
                 if(ij > 1)then
-                    b_coh(ij) = o_coh(ij)*a_coh(ij)
-                    k_coh(ij) = (1-o_coh(ij))*a_coh(ij)
+                    k_coh(ij) = o_coh(ij)*a_coh(ij)
+                    b_coh(ij) = (1-o_coh(ij))*a_coh(ij)
+print*, 'ij, o, k, b', ij, o_coh(ij), k_coh(ij), b_coh(ij)
                 endif
-                
+
             enddo
 
         else
@@ -655,6 +655,7 @@ print*, 'pension iv', pen(JJ, ir)
         LL = damp*LL + (1d0-damp)*LL_old
         II = (n_p+delta)*KK
         YY = TProd_bar * KK ** alpha * LL ** (1d0-alpha)
+print*, 'KK, LL, YY', KK, LL, YY
 
         ! get difference on goods market
         DIFF = YY-CC-II
@@ -949,10 +950,10 @@ print*, 'tauw', tauw
         ages = 20 + (/(ij, ij=1,JJ)/)*5
 
         write(21, '(a,a)')' IJ      CONS    INCOME    ASSETS', &
-            '     OMEGA     CV(C)     CV(Y)     CV(A)     CV(O)     IXMAX     IAMAX'
+            '     OMEGA     Capital    Bond    CV(C)     CV(Y)     CV(A)     CV(O)     IXMAX     IAMAX'
         do ij = 1, JJ
-            write(21,'(i3,8f10.3,2i10)')ages(ij), c_coh(ij), y_coh(ij), a_coh(ij), o_coh(ij), &
-                    cv_c(ij), cv_y(ij), cv_a(ij), cv_o(ij), ixmax(ij), iamax(ij)
+            write(21,'(i3,10f10.3,2i10)')ages(ij), c_coh(ij), y_coh(ij), a_coh(ij), o_coh(ij), k_coh(ij), &
+                    b_coh(ij), cv_c(ij), cv_y(ij), cv_a(ij), cv_o(ij), ixmax(ij), iamax(ij)
         enddo
         write(21,'(a/)')'--------------------------------------------------------------------'
 

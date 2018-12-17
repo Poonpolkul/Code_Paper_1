@@ -59,7 +59,7 @@ module globals
 
     ! risk free rate and risk premium
     real*8, parameter :: r_f  = 0.02d0*5d0
-    real*8, parameter :: mu_r = 0.005d0*5d0
+    real*8, parameter :: mu_r = 0.01d0*5d0
 
     ! size of the asset grid
     real*8, parameter :: a_l    = 0.0d0
