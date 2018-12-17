@@ -57,8 +57,7 @@ module globals
     real*8, parameter :: sigma_vtheta = 0.157d0**2d0*sqrt(5d0)
     real*8, parameter :: rho          = 0.00d0
 
-    ! risk free rate and risk premium
-    real*8, parameter :: r_f  = 0.02d0*5d0
+    ! Initial risk premium
     real*8, parameter :: mu_r = 0.01d0*5d0
 
     ! size of the asset grid
@@ -164,7 +163,7 @@ contains
         implicit none
         real*8, intent(in) :: p
         real*8 :: foc_port, omega_p, R_port, X_p, earnings, c_p, varphi, dist
-        integer :: ixl, ixr, iw, is, ir !, isr
+        integer :: ixl, ixr, iw, is, ir
 
         ! store portfolio share
         omega_p  = p
@@ -175,7 +174,6 @@ contains
 
                 ! get return on the portfolio
                 R_port = 1d0 + rb + omega_p*(rk(ir) - rb)
-!~                 R_port = 1d0 + r_f + omega_p*(mu_r + vtheta(ir))
 
                 ! get tomorrow's cash-on-hand (epsilon^+ = 0)
                 X_p = R_port*a(ia_com) + pen(ij_com+1, ir)
@@ -199,11 +197,10 @@ contains
                     do is = 1, NS
 
                         ! get return on the portfolio
-                        R_port = 1d0 + r_f + omega_p*(rk(ir) - rb)
-!~                         R_port = 1d0 + r_f + omega_p*(mu_r + vtheta(ir))
+                        R_port = 1d0 + rb + omega_p*(rk(ir) - rb)
 
                         ! derive labor earnings
-                        earnings  = w(ir)*eff(ij_com+1)*zeta(iw)
+                        earnings  = wn(ir)*eff(ij_com+1)*zeta(iw)
 
                         ! get tomorrow's cash on hand
                         X_p = R_port*a(ia_com)/eps(is) + earnings
@@ -219,7 +216,6 @@ contains
                               (1d0-varphi)*c(ij_com+1, ixr)
                         c_p = max(c_p, 1d-10)
                         foc_port = foc_port + dist*(rk(ir) - rb)*a(ia_com)*margu(eps(is)*c_p)
-!~                         foc_port = foc_port + dist*(mu_r + vtheta(ir))*a(ia_com)*margu(eps(is)*c_p)
                     enddo
                 enddo
             enddo

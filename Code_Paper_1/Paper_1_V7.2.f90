@@ -29,7 +29,7 @@ program PortfolioChoice
     ! iterate until value function converges
     do iter = 1, itermax
 
-Print*, ' ################### iteration =', iter, '###################'
+Print*, ' ################### iteration =', iter, '####################################'
         ! derive prices
         call prices()
 
@@ -74,9 +74,6 @@ contains
         implicit none
         integer*8 :: ij
 
-        ! wage rate for effective labor
-        w = 1d0
-
         ! set up population structure
         do ij = 1, JJ
             m(ij) = (1d0+n_p)**(1d0-ij)  
@@ -103,14 +100,12 @@ contains
         call normal_discrete(zeta, dist_zeta, 0d0, sigma_zeta)
         zeta = exp(zeta)
 
-        ! discretize eps-vtheta shocks        
+        ! discretize eps shocks        
         call normal_discrete(eps, dist_eps, 0d0, sigma_eps)
         eps = exp(eps)
-        
-!~         call normal_discrete(vtheta, dist_vtheta, 0d0, sigma_vtheta)
 
+        ! discretize TProd shocks        
         call normal_discrete(TProd, dist_TProd, TProd_bar, sigma_vtheta)
-!~         TProd=exp(TProd)
 
         ! initialize asset grid
         call grid_Cons_Grow(a, a_l, a_u, a_grow)
@@ -139,13 +134,12 @@ contains
     subroutine prices()
 
         implicit none
-        integer :: ir, ij, ijj, ig, iq
-        real*8 :: abor_temp
-
+        integer :: ir
+        
         ! calculate wage rate
         do ir = 1, NR
             w(ir) = TProd(ir)*(1d0-alpha)*(KK/LL)**alpha
-!~ print*, 'w', w(iv)
+print*, 'w', w(ir)
         enddo
 
         ! calculate return on risky asset
@@ -176,8 +170,8 @@ print*, 'pension iv', pen(JJ, ir)
         enddo
         
         ! endogenous lower and upper bound of cash-on-hand grid
-        X_l = min(w(1)*minval(eff(1:JR-1))*minval(eps(:))*zeta(1), pen(JR, 1))
-        X_u = (1d0 + r_f + mu_r + maxval(vtheta(:)))*a_u + &
+        X_l = min((1d0-tauw)*w(1)*minval(eff(1:JR-1))*minval(eps(:))*zeta(1), pen(JR, 1))
+        X_u = (1d0 + rk(NR))*a_u + &
                     w(NR)*maxval(eff(1:JR-1))*maxval(eps(:))*zeta(NW)
         call grid_Cons_Grow(X, X_l, X_u, X_grow)
 !~ Print*, 'X', X
@@ -499,7 +493,7 @@ print*, 'pension iv', pen(JJ, ir)
                 do ir = 1, NR
 
                     ! get today's cash-on-hand
-                    R_port = 1d0 + r_f + omega_plus(ij-1, ia)*(rk(ir) - rb)
+                    R_port = 1d0 + rb + omega_plus(ij-1, ia)*(rk(ir) - rb)
 !~                     R_port = 1d0 + r_f + omega_plus(ij-1, ia)*(mu_r + vtheta(ir))
 
                     X_p = R_port*a(ia) + pen(ij, ir)
@@ -602,7 +596,7 @@ print*, 'pension iv', pen(JJ, ir)
                 if(ij > 1)then
                     k_coh(ij) = o_coh(ij)*a_coh(ij)
                     b_coh(ij) = (1-o_coh(ij))*a_coh(ij)
-print*, 'ij, o, k, b', ij, o_coh(ij), k_coh(ij), b_coh(ij)
+print*, 'ij, o, a, k, b, c', ij, o_coh(ij), a_coh(ij), k_coh(ij), b_coh(ij), c_coh(ij)
                 endif
 
             enddo
@@ -652,13 +646,14 @@ print*, 'ij, o, k, b', ij, o_coh(ij), k_coh(ij), b_coh(ij)
 
         ! damping and other quantities [damping acording to Gauss-Seidel procedure]
         KK = damp*(KK) + (1d0-damp)*KK_old 
-        LL = damp*LL + (1d0-damp)*LL_old
+!~         LL = damp*LL + (1d0-damp)*LL_old
         II = (n_p+delta)*KK
         YY = TProd_bar * KK ** alpha * LL ** (1d0-alpha)
-print*, 'KK, LL, YY', KK, LL, YY
 
         ! get difference on goods market
         DIFF = YY-CC-II
+        
+print*, 'KK:', KK, 'BB', BB, 'LL:', LL, 'YY:', YY, 'DIFF:', DIFF
 
         ! calculate variances
         var_c = 0d0
@@ -893,9 +888,9 @@ print*, 'KK, LL, YY', KK, LL, YY
         implicit none
         
         if (BB > 0d0) then
-            rb = rb*0.9d0
+            rb = rb*0.95d0
         elseif (BB < 0d0) then
-            rb = rb*1.1d0
+            rb = rb*1.05d0
         endif
         
     end subroutine
