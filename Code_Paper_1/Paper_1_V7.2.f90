@@ -29,31 +29,35 @@ program PortfolioChoice
     ! iterate until value function converges
     do iter = 1, itermax
 
-Print*, ' ################### iteration =', iter, '####################################'
-        ! derive prices
-        call prices()
+        iterb = 0
+        do while (abs(BB)>= sig .or. iterb == 0)
+            iterb = iterb + 1
+            
+Print*, ' ################### iteration (outer, inner) =', iter, iterb, '############################'
+            ! derive prices
+            call prices()
 
-        ! solve the household problem
-        call solve_household()
+            ! solve the household problem
+            call solve_household()
 
-        ! calculate the distribution of households over state space
-        call get_distribution()
-print*, 'hello1'
-        ! aggregate individual decisions
-        call aggregation()
-print*, 'hello2'
-        ! update bond market return
-        call bond_return()
-print*, 'hello3'
-        ! determine the government parameters
-        call government()
-print*, 'hello4'
-        if(abs(DIFF/YY)*100d0 < sig)then
-            call toc
-            call output()
-            return
-        endif
+            ! calculate the distribution of households over state space
+            call get_distribution()
 
+            ! aggregate individual decisions
+            call aggregation()
+
+            ! update bond market return
+            call bond_return()
+
+            ! determine the government parameters
+            call government()
+
+            if(abs(DIFF/YY)*100d0 < sig .and. abs(BB) < sig)then
+                call toc
+                call output()
+                return
+            endif
+        enddo
     enddo
     
     ! stop the clock
@@ -116,8 +120,8 @@ contains
 
         ! initial guesses for macro variables
         KK = 1d0
-        BB = 0d0
-        LL = 1d0
+        BB = 0.5d0
+        LL =  1d0
         YY = 1d0
         II = (n_p+delta)*KK
 
@@ -139,7 +143,7 @@ contains
         ! calculate wage rate
         do ir = 1, NR
             w(ir) = TProd(ir)*(1d0-alpha)*(KK/LL)**alpha
-print*, 'w', w(ir)
+!~ print*, 'w', w(ir)
         enddo
 
         ! calculate return on risky asset
@@ -147,8 +151,9 @@ print*, 'w', w(ir)
             rk(ir) = (TProd(ir)*KK**alpha*LL**(1d0-alpha)-w(ir)*LL)/KK
 print*, 'rk', rk(ir)
         enddo
-       
-        if (iter==1) then
+
+!~ rb=0.357d0
+        if (iter==1 .and. iterb == 1) then
             rb = 0
             do ir = 1, NR
                 rb = rb + (rk(ir)-mu_r)/NR
@@ -159,14 +164,14 @@ print*, 'rb_end', rb
         ! calculate after-tax wage rate
         do ir = 1, NR
             wn(ir) = w(ir)*(1d0-tauw)
-print*, 'wn(iv)', wn(ir)
+!~ print*, 'wn(iv)', wn(ir)
         enddo
         
         ! old-age transfers
         pen(:,:) = 0d0
         do ir = 1, NR
             pen(JR:JJ, ir) = max(kappa*w(ir)*eff(JR-1), 1d-10)
-print*, 'pension iv', pen(JJ, ir)
+!~ print*, 'pension iv', pen(JJ, ir)
         enddo
         
         ! endogenous lower and upper bound of cash-on-hand grid
@@ -245,6 +250,15 @@ print*, 'pension iv', pen(JJ, ir)
 !~             return
 !~         else
 
+
+!##############################################################################
+        ! use intermediate value theorem
+        if(port0*port1 > 0d0 .and. abs(port0) <= abs(port1))then
+                omega_plus(ij, ia) = 0d0
+            return
+        else
+!##############################################################################
+
             ! get order of magnitude of foc
             tolerance = 1d-5*abs(port0-port1)
 
@@ -266,7 +280,7 @@ print*, 'pension iv', pen(JJ, ir)
 
             ! reset tolerance level to original value
             call settol_root(1d-8)
-!~         endif
+        endif
 !~ print*, 'ij, ia, omega', ij, ia, omega_plus(ij, ia)
     end subroutine
 
@@ -365,6 +379,7 @@ print*, 'pension iv', pen(JJ, ir)
                 do iw = 1, NW
                     do ir = 1, NR
                         do is = 1, NS
+
                             ! get return on the portfolio
                             R_port = 1d0 + rb + omega_plus(ij, ia)*(rk(ir) - rb)
 !~                             R_port = 1d0 + r_f + omega_plus(ij, ia)*(mu_r + vtheta(ir))
@@ -387,12 +402,12 @@ print*, 'pension iv', pen(JJ, ir)
 
                             ! get RHS of foc and Q
                             RHS(ij, ia) = RHS(ij, ia) + dist*R_port*margu(eps(is)*c_p)
+
                             Q(ij, ia)   = Q(ij, ia) + dist*(eps(is)*EV)**egam/egam
                         enddo
                     enddo
                 enddo
             endif
-
             RHS(ij, ia) = (beta*psi(ij+1)*RHS(ij, ia))**(-gamma)
             Q(ij, ia)   = (egam*Q(ij, ia))**(1d0/egam)
 
@@ -596,7 +611,7 @@ print*, 'pension iv', pen(JJ, ir)
                 if(ij > 1)then
                     k_coh(ij) = o_coh(ij)*a_coh(ij)
                     b_coh(ij) = (1-o_coh(ij))*a_coh(ij)
-print*, 'ij, o, a, k, b, c', ij, o_coh(ij), a_coh(ij), k_coh(ij), b_coh(ij), c_coh(ij)
+print*, 'ij:', ij, 'o:', o_coh(ij),'a:', a_coh(ij),'k:', k_coh(ij),'b:', b_coh(ij),'c:', c_coh(ij)
                 endif
 
             enddo
@@ -629,29 +644,36 @@ print*, 'ij, o, a, k, b, c', ij, o_coh(ij), a_coh(ij), k_coh(ij), b_coh(ij), c_c
         endif
 
         ! calculate aggregate quantities
-        CC = 0d0
-        LL = 0d0
-        AA = 0d0
-        KK = 0d0
         BB = 0d0
-        workpop = 0d0
         do ij = 1, JJ
-            CC = CC + c_coh(ij)*m(ij)
-            LL = LL + l_coh(ij)*m(ij)
-            AA = AA + a_coh(ij)*m(ij)
-            KK = KK + k_coh(ij)*m(ij)
             BB = BB + b_coh(ij)*m(ij)
-            if(ij < JR) workpop = workpop + m(ij)
         enddo
+        
+        if (abs(BB) < sig) then
+            CC = 0d0
+            LL = 0d0
+            AA = 0d0
+            KK = 0d0
+            BB = 0d0
+            workpop = 0d0
+            do ij = 1, JJ
+                CC = CC + c_coh(ij)*m(ij)
+                LL = LL + l_coh(ij)*m(ij)
+                AA = AA + a_coh(ij)*m(ij)
+                KK = KK + k_coh(ij)*m(ij)
+                BB = BB + b_coh(ij)*m(ij)
+                if(ij < JR) workpop = workpop + m(ij)
+            enddo
 
-        ! damping and other quantities [damping acording to Gauss-Seidel procedure]
-        KK = damp*(KK) + (1d0-damp)*KK_old 
-!~         LL = damp*LL + (1d0-damp)*LL_old
-        II = (n_p+delta)*KK
-        YY = TProd_bar * KK ** alpha * LL ** (1d0-alpha)
+            ! damping and other quantities [damping acording to Gauss-Seidel procedure]
+            KK = damp*(KK) + (1d0-damp)*KK_old 
+            LL = damp*LL + (1d0-damp)*LL_old
+            II = (n_p+delta)*KK
+            YY = TProd_bar * KK ** alpha * LL ** (1d0-alpha)
 
-        ! get difference on goods market
-        DIFF = YY-CC-II
+            ! get difference on goods market
+            DIFF = YY-CC-II
+        endif
         
 print*, 'KK:', KK, 'BB', BB, 'LL:', LL, 'YY:', YY, 'DIFF:', DIFF
 
@@ -886,13 +908,42 @@ print*, 'KK:', KK, 'BB', BB, 'LL:', LL, 'YY:', YY, 'DIFF:', DIFF
     ! subroutine for updating bond return
     subroutine bond_return()
         implicit none
-        
-        if (BB > 0d0) then
-            rb = rb*0.95d0
-        elseif (BB < 0d0) then
-            rb = rb*1.05d0
+        real*8 :: rb_temp
+
+        if (iterb == 1 .and. BB > 0d0) then
+            rb_a = rb
+            rb_b = rb*(1d0-Damp_rb)
+            BB_a = BB
+            rb = rb_b
+        elseif (iterb == 1 .and. BB < 0d0) then
+            rb_a = rb
+            rb_b = rb*(1d0+Damp_rb)
+            BB_a = BB
+            rb = rb_b
+        elseif (iterb == 2) then
+            BB_b = BB
+            if(BB_a*BB_b >= 0d0)then
+                stop 'Error: There is no root in [rb_old, rb_new]'
+            endif
+            rb_c = (rb_a+rb_b)/2d0
+            rb = rb_c
+        else
+            BB_c = BB
+            rb_c = rb
+            if (BB_a*BB_c < 0d0) then
+                rb_b = rb_c
+                BB_b = BB_c
+                rb = (rb_a+rb_b)/2d0
+            else
+                rb_a = rb_c
+                BB_a = BB_c
+                rb = (rb_a+rb_b)/2d0
+            endif
         endif
-        
+   
+print*, 'rb_a:', rb_a, 'rb_b:', rb_b, 'rb_c:', rb_c, 'rb', rb
+print*, 'BB_a:', BB_a, 'BB_b:', BB_b, 'BB_c:', BB_c, 'BB', BB
+
     end subroutine
 
     ! subroutine for calculating government parameters

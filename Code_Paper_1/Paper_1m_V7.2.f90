@@ -41,7 +41,7 @@ module globals
     integer, parameter :: NX = 200
 
     ! household preference parameters
-    real*8, parameter :: gamma = 0.10d0
+    real*8, parameter :: gamma = 0.1d0
     real*8, parameter :: egam = 1d0 - 1d0/gamma
     real*8, parameter :: beta = 0.96d0**5d0
 
@@ -94,15 +94,17 @@ module globals
     
     ! simulation parameters
     real*8, parameter :: damp    = 0.30d0
+    real*8, parameter :: Damp_rb    = 0.9d0
     real*8, parameter :: sig     = 1d-4
-    integer, parameter :: itermax = 50
+    integer, parameter :: itermax = 200
 
     ! counter variables
-    integer :: iter
+    integer :: iter, iterb
 
     ! macroeconomic variables
-    real*8 :: rb, rk(NR)
+    real*8 :: rb, rk(NR), rb_a, rb_b, rb_c
     real*8 :: AA, KK, BB, LL, HH
+    real*8 :: BB_a, BB_b, BB_c
     real*8 :: YY, CC, II, INC
 
     ! government variables
