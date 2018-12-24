@@ -1,13 +1,12 @@
 !##############################################################################
 ! MODULE globals
 !
-! This code is published under the GNU General Public License v3
-!                         (https://www.gnu.org/licenses/gpl-3.0.en.html)
+! ## Portfolio choice in the life cycle model (with different aggregations)
+! with engodenous rates of returns on bond and capital
 !
-! Authors: Hans Fehr and Fabian Kindermann
-!          contact@ce-fortran.com
+! This code is adjusted from Hans Fehr and Fabian Kindermann
 !
-! #VC# VERSION: 1.0  (23 January 2018)
+! #VC# VERSION: 7.2  (20 Dec 2019)
 !
 !##############################################################################
 module globals
@@ -41,9 +40,9 @@ module globals
     integer, parameter :: NX = 200
 
     ! household preference parameters
-    real*8, parameter :: gamma = 0.1d0
+    real*8, parameter :: gamma = 0.1d0 !0.1d0
     real*8, parameter :: egam = 1d0 - 1d0/gamma
-    real*8, parameter :: beta = 0.96d0**5d0
+    real*8, parameter :: beta = 0.96d0**5
 
     ! production parameters
     real*8, parameter :: alpha = 0.36d0 !#####################
@@ -87,16 +86,20 @@ module globals
     real*8 :: eps(NS), vtheta(NR)
 
     ! demographic parameters 
-    real*8, parameter :: n_p   = 0.01d0 
+    real*8, parameter :: n_p   = (1d0+0.01d0)**5-1d0
 
     ! demographic and other model parameters
     real*8 :: m(JJ)
     
     ! simulation parameters
     real*8, parameter :: damp    = 0.30d0
-    real*8, parameter :: Damp_rb    = 0.9d0
+    real*8, parameter :: Damp_rb    = 0.7d0
     real*8, parameter :: sig     = 1d-4
-    integer, parameter :: itermax = 200
+    integer, parameter :: itermax = 30
+    
+    ! borrowing cost
+    real*8, parameter :: b_cost = 0.01d0
+    real*8, parameter :: b_cost2 = 0.02d0
 
     ! counter variables
     integer :: iter, iterb
@@ -165,7 +168,7 @@ contains
         implicit none
         real*8, intent(in) :: p
         real*8 :: foc_port, omega_p, R_port, X_p, earnings, c_p, varphi, dist
-        integer :: ixl, ixr, iw, is, ir
+        integer :: ixl, ixr, iw, is, ir, iterp
 
         ! store portfolio share
         omega_p  = p

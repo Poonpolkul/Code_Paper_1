@@ -2,14 +2,11 @@
 ! PROGRAM PortfolioChoice
 !
 ! ## Portfolio choice in the life cycle model (with different aggregations)
+! with engodenous rates of returns on bond and capital
 !
-! This code is published under the GNU General Public License v3
-!                         (https://www.gnu.org/licenses/gpl-3.0.en.html)
+! This code is adjusted from Hans Fehr and Fabian Kindermann
 !
-! Authors: Hans Fehr and Fabian Kindermann
-!          contact@ce-fortran.com
-!
-! #VC# VERSION: 1.0  (23 January 2018)
+! #VC# VERSION: 7.2  (20 Dec 2019)
 !
 !##############################################################################
 include "Paper_1m_V7.2.f90"
@@ -32,8 +29,9 @@ program PortfolioChoice
         iterb = 0
         do while (abs(BB)>= sig .or. iterb == 0)
             iterb = iterb + 1
-            
+
 Print*, ' ################### iteration (outer, inner) =', iter, iterb, '############################'
+
             ! derive prices
             call prices()
 
@@ -143,7 +141,7 @@ contains
         ! calculate wage rate
         do ir = 1, NR
             w(ir) = TProd(ir)*(1d0-alpha)*(KK/LL)**alpha
-!~ print*, 'w', w(ir)
+print*, 'w', w(ir)
         enddo
 
         ! calculate return on risky asset
@@ -152,14 +150,15 @@ contains
 print*, 'rk', rk(ir)
         enddo
 
-!~ rb=0.357d0
         if (iter==1 .and. iterb == 1) then
             rb = 0
             do ir = 1, NR
                 rb = rb + (rk(ir)-mu_r)/NR
+
 print*, 'rb', rb
             enddo
         endif
+
 print*, 'rb_end', rb       
         ! calculate after-tax wage rate
         do ir = 1, NR
@@ -240,17 +239,6 @@ print*, 'rb_end', rb
         port0 = foc_port(0d0)
         port1 = foc_port(1d0)
 
-!~         ! use intermediate value theorem
-!~         if(port0*port1 > 0d0)then
-!~             if(abs(port0) > abs(port1))then
-!~                 omega_plus(ij, ia) = 1d0
-!~             else
-!~                 omega_plus(ij, ia) = 0d0
-!~             endif
-!~             return
-!~         else
-
-
 !##############################################################################
         ! use intermediate value theorem
         if(port0*port1 > 0d0 .and. abs(port0) <= abs(port1))then
@@ -269,7 +257,6 @@ print*, 'rb_end', rb
             ! get best guess for the root of foc_port
             x_in = -port0/(port1-port0)
             check = .false.
-
             ! solve the household problem using rootfinding
             call fzero(x_in, foc_port, check)
 
@@ -281,7 +268,7 @@ print*, 'rb_end', rb
             ! reset tolerance level to original value
             call settol_root(1d-8)
         endif
-!~ print*, 'ij, ia, omega', ij, ia, omega_plus(ij, ia)
+
     end subroutine
 
 
@@ -350,7 +337,7 @@ print*, 'rb_end', rb
 
                     ! get return on the portfolio
                     R_port = 1d0 + rb + omega_plus(ij, ia)*(rk(ir) - rb)
-!~                     R_port = 1d0 + r_f + omega_plus(ij, ia)*(mu_r + vtheta(ir))
+        
 
                     ! get tomorrow's cash-on-hand (epsilon^+ = 0)
                     X_p = R_port*a(ia) + pen(ij+1, ir)
@@ -381,9 +368,9 @@ print*, 'rb_end', rb
                         do is = 1, NS
 
                             ! get return on the portfolio
-                            R_port = 1d0 + rb + omega_plus(ij, ia)*(rk(ir) - rb)
-!~                             R_port = 1d0 + r_f + omega_plus(ij, ia)*(mu_r + vtheta(ir))
 
+                            R_port = 1d0 + rb + omega_plus(ij, ia)*(rk(ir) - rb)
+                            
                             ! get tomorrow's cash on hand
                             X_p = R_port*a(ia)/eps(is) + wn(ir)*eff(ij+1)*zeta(iw)
 
@@ -408,7 +395,9 @@ print*, 'rb_end', rb
                     enddo
                 enddo
             endif
+
             RHS(ij, ia) = (beta*psi(ij+1)*RHS(ij, ia))**(-gamma)
+
             Q(ij, ia)   = (egam*Q(ij, ia))**(1d0/egam)
 
         enddo
@@ -460,14 +449,12 @@ print*, 'rb_end', rb
 
                     ! get distributional weight
                     dist = dist_zeta(iw)*dist_TProd(ir)
-!~                     dist = dist_zeta(iw)
 
                     ! initialize the distribution
                     phi_X(1, ixl) = phi_X(1, ixl) + dist*varphi
                     phi_X(1, ixr) = phi_X(1, ixr) + dist*(1d0-varphi)
                 enddo
             enddo
-!~ print*, 'phi_X(1,:)', phi_X(1,:)
 
         elseif(ij <= JR-1)then
 
@@ -480,10 +467,9 @@ print*, 'rb_end', rb
                         do is = 1, NS
 
                             ! get today's cash-on-hand
+
                             R_port = 1d0 + rb + omega_plus(ij-1, ia)*(rk(ir) - rb)
-!~                             R_port = 1d0 + r_f + omega_plus(ij-1, ia)*(mu_r + vtheta(ir))
-
-
+                            
                             X_p = R_port*a(ia)/eps(is) + wn(ir)*eff(ij)*zeta(iw)
 
                             ! derive interpolation weights
@@ -508,9 +494,9 @@ print*, 'rb_end', rb
                 do ir = 1, NR
 
                     ! get today's cash-on-hand
-                    R_port = 1d0 + rb + omega_plus(ij-1, ia)*(rk(ir) - rb)
-!~                     R_port = 1d0 + r_f + omega_plus(ij-1, ia)*(mu_r + vtheta(ir))
 
+                    R_port = 1d0 + rb + omega_plus(ij-1, ia)*(rk(ir) - rb)
+                    
                     X_p = R_port*a(ia) + pen(ij, ir)
 
                     ! derive interpolation weights
@@ -551,7 +537,6 @@ print*, 'rb_end', rb
             phi_a(ij, ial) = phi_a(ij, ial) + varphi*phi_X(ij, ix)
             phi_a(ij, iar) = phi_a(ij, iar) + (1d0-varphi)*phi_X(ij, ix)
         enddo
-!~ print*, 'phi_a(1,:)', phi_a(1,:)
 
     end subroutine
 
@@ -667,8 +652,8 @@ print*, 'ij:', ij, 'o:', o_coh(ij),'a:', a_coh(ij),'k:', k_coh(ij),'b:', b_coh(i
 
             ! damping and other quantities [damping acording to Gauss-Seidel procedure]
             KK = damp*(KK) + (1d0-damp)*KK_old 
-            LL = damp*LL + (1d0-damp)*LL_old
-            II = (n_p+delta)*KK
+!~             LL = damp*LL + (1d0-damp)*LL_old
+            II = (n_p)*KK !(n_p+delta)*KK
             YY = TProd_bar * KK ** alpha * LL ** (1d0-alpha)
 
             ! get difference on goods market
@@ -807,7 +792,6 @@ print*, 'KK:', KK, 'BB', BB, 'LL:', LL, 'YY:', YY, 'DIFF:', DIFF
 
                 ! new innovations
                 do is = 1, NR
-!~                 do isr = 1, NSR
 
                     ! distribute on new grid
                     eta_temp = eta(ij-1, ie) + log(eps(is))
@@ -910,17 +894,24 @@ print*, 'KK:', KK, 'BB', BB, 'LL:', LL, 'YY:', YY, 'DIFF:', DIFF
         implicit none
         real*8 :: rb_temp
 
-        if (iterb == 1 .and. BB > 0d0) then
+print*, 'rb1', rb
+        if (iterb == 1 .and. BB > 0d0 .and. abs(BB)>= sig) then
             rb_a = rb
-            rb_b = rb*(1d0-Damp_rb)
+            rb_b = rb-0.5
+print*, 'rb2', rb
+!~             rb_b = rb*(1d0-Damp_rb)
+print*, 'rb_b', rb_b
+
             BB_a = BB
             rb = rb_b
-        elseif (iterb == 1 .and. BB < 0d0) then
+        elseif (iterb == 1 .and. BB < 0d0 .and. abs(BB)>= sig) then
             rb_a = rb
-            rb_b = rb*(1d0+Damp_rb)
+            rb_b = rb+0.5
+!~             rb_b = rb*(1d0+Damp_rb)
             BB_a = BB
             rb = rb_b
         elseif (iterb == 2) then
+
             BB_b = BB
             if(BB_a*BB_b >= 0d0)then
                 stop 'Error: There is no root in [rb_old, rb_new]'
