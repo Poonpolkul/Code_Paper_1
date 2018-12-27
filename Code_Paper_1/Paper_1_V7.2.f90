@@ -48,7 +48,7 @@ Print*, ' ################### iteration (outer, inner) =', iter, iterb, '#######
             call bond_return()
 
             ! determine the government parameters
-            call government()
+            if (abs(BB) < sig) call government()
 
             if(abs(DIFF/YY)*100d0 < sig .and. abs(BB) < sig)then
                 call toc
@@ -79,6 +79,7 @@ contains
         ! set up population structure
         do ij = 1, JJ
             m(ij) = (1d0+n_p)**(1d0-ij)  
+print*, 'm(ij):', ij, m(ij)
         enddo
 
         ! set survival probabilities
@@ -117,11 +118,12 @@ contains
         tauw  = 0.0d0
 
         ! initial guesses for macro variables
-        KK = 1d0
+        KK = 10.594014263974579d0 !1d0
         BB = 0.5d0
-        LL =  1d0
-        YY = 1d0
-        II = (n_p+delta)*KK
+        LL =  13.73258590789281d0 !1d0
+        YY = 15.009441356309113d0 !1d0
+        II = (n_p)*KK
+!~         II = (n_p+delta)*KK
 
         ! open files
         open(21, file='output.out')
@@ -137,12 +139,16 @@ contains
 
         implicit none
         integer :: ir
-        
+
         ! calculate wage rate
+        ! Fixed wage (update each iteration from KK and LL)
+        wf = 0d0
+        wf = TProd_bar*(1d0-alpha)*(KK/LL)**alpha
+
         do ir = 1, NR
-            w(ir) = TProd(ir)*(1d0-alpha)*(KK/LL)**alpha
-print*, 'w', w(ir)
+            w(ir) = wf
         enddo
+print*, 'wf', wf
 
         ! calculate return on risky asset
         do ir = 1, NR
@@ -154,7 +160,6 @@ print*, 'rk', rk(ir)
             rb = 0
             do ir = 1, NR
                 rb = rb + (rk(ir)-mu_r)/NR
-
 print*, 'rb', rb
             enddo
         endif
@@ -163,22 +168,20 @@ print*, 'rb_end', rb
         ! calculate after-tax wage rate
         do ir = 1, NR
             wn(ir) = w(ir)*(1d0-tauw)
-!~ print*, 'wn(iv)', wn(ir)
         enddo
-        
         ! old-age transfers
         pen(:,:) = 0d0
+
         do ir = 1, NR
-            pen(JR:JJ, ir) = max(kappa*w(ir)*eff(JR-1), 1d-10)
-!~ print*, 'pension iv', pen(JJ, ir)
+            pen(JR:JJ, ir) = kappa*w(ir)*eff(JR-1)
+print*, 'pension iv', pen(JJ, ir)
         enddo
-        
+
         ! endogenous lower and upper bound of cash-on-hand grid
         X_l = min((1d0-tauw)*w(1)*minval(eff(1:JR-1))*minval(eps(:))*zeta(1), pen(JR, 1))
         X_u = (1d0 + rk(NR))*a_u + &
                     w(NR)*maxval(eff(1:JR-1))*maxval(eps(:))*zeta(NW)
         call grid_Cons_Grow(X, X_l, X_u, X_grow)
-!~ Print*, 'X', X
 
     end subroutine
 
@@ -265,7 +268,6 @@ print*, 'rb_end', rb
 
             omega_plus(ij, ia) = x_in
 
-            ! reset tolerance level to original value
             call settol_root(1d-8)
         endif
 
@@ -335,9 +337,7 @@ print*, 'rb_end', rb
 
                 do ir = 1, NR
 
-                    ! get return on the portfolio
                     R_port = 1d0 + rb + omega_plus(ij, ia)*(rk(ir) - rb)
-        
 
                     ! get tomorrow's cash-on-hand (epsilon^+ = 0)
                     X_p = R_port*a(ia) + pen(ij+1, ir)
@@ -397,6 +397,7 @@ print*, 'rb_end', rb
             endif
 
             RHS(ij, ia) = (beta*psi(ij+1)*RHS(ij, ia))**(-gamma)
+
 
             Q(ij, ia)   = (egam*Q(ij, ia))**(1d0/egam)
 
@@ -548,7 +549,7 @@ print*, 'rb_end', rb
         integer :: ij, ix, ia, ie, iw, ir
         real*8 :: sigma_eta(JJ), mu_exp(JJ), sigma_exp(JJ)
         real*8 :: var_c(JJ), var_a(JJ), var_y(JJ), var_o(JJ)
-        real*8 :: workpop, LL_old, KK_old, BB_old
+        real*8 :: LL_old, KK_old, BB_old
 
         ! generate eta distribution if not analytical calculation
         if(.not. analytical)call generate_eta()
@@ -596,11 +597,10 @@ print*, 'rb_end', rb
                 if(ij > 1)then
                     k_coh(ij) = o_coh(ij)*a_coh(ij)
                     b_coh(ij) = (1-o_coh(ij))*a_coh(ij)
-print*, 'ij:', ij, 'o:', o_coh(ij),'a:', a_coh(ij),'k:', k_coh(ij),'b:', b_coh(ij),'c:', c_coh(ij)
                 endif
-
+print*, 'ij:', ij, 'y:', y_coh(ij), 'o:', o_coh(ij),'a:', a_coh(ij),'k:',&
+ k_coh(ij),'b:', b_coh(ij),'c:', c_coh(ij), 'l:', l_coh(ij)
             enddo
-
         else
 
             do ij = 1, JJ
@@ -652,15 +652,18 @@ print*, 'ij:', ij, 'o:', o_coh(ij),'a:', a_coh(ij),'k:', k_coh(ij),'b:', b_coh(i
 
             ! damping and other quantities [damping acording to Gauss-Seidel procedure]
             KK = damp*(KK) + (1d0-damp)*KK_old 
-!~             LL = damp*LL + (1d0-damp)*LL_old
+            LL = damp*LL + (1d0-damp)*LL_old
             II = (n_p)*KK !(n_p+delta)*KK
-            YY = TProd_bar * KK ** alpha * LL ** (1d0-alpha)
+            YY = TProd_bar*KK**alpha*LL**(1d0-alpha)
+   
+            ! get average income and average working hours
+            INC = wf*LL/workpop
 
             ! get difference on goods market
             DIFF = YY-CC-II
         endif
         
-print*, 'KK:', KK, 'BB', BB, 'LL:', LL, 'YY:', YY, 'DIFF:', DIFF
+print*, 'KK:', KK, 'BB', BB, 'LL:', LL, 'YY:', YY, 'CC:', CC, 'II:', II, 'DIFF:', DIFF
 
         ! calculate variances
         var_c = 0d0
@@ -896,24 +899,27 @@ print*, 'KK:', KK, 'BB', BB, 'LL:', LL, 'YY:', YY, 'DIFF:', DIFF
 
 print*, 'rb1', rb
         if (iterb == 1 .and. BB > 0d0 .and. abs(BB)>= sig) then
+
             rb_a = rb
-            rb_b = rb-0.5
+            rb_b = rb-0.5d0
+            if (rb_b <= 0) rb_b = 0.01d0
 print*, 'rb2', rb
-!~             rb_b = rb*(1d0-Damp_rb)
+
 print*, 'rb_b', rb_b
 
             BB_a = BB
             rb = rb_b
         elseif (iterb == 1 .and. BB < 0d0 .and. abs(BB)>= sig) then
+
             rb_a = rb
-            rb_b = rb+0.5
-!~             rb_b = rb*(1d0+Damp_rb)
+            rb_b = rb+0.5d0
             BB_a = BB
             rb = rb_b
         elseif (iterb == 2) then
 
             BB_b = BB
             if(BB_a*BB_b >= 0d0)then
+print*, 'BB_a, BB_a:', BB_a, BB_b
                 stop 'Error: There is no root in [rb_old, rb_new]'
             endif
             rb_c = (rb_a+rb_b)/2d0
@@ -950,14 +956,16 @@ print*, 'BB_a:', BB_a, 'BB_b:', BB_b, 'BB_c:', BB_c, 'BB', BB
         enddo
 
         ! get total pension spending
-        do ij = 1, JJ
+        total_pen = 0d0
+        do ij = JR, JJ
             do ir = 1, NR
                 total_pen = total_pen + m(ij)*dist_Tprod(ir)*pen(ij, ir)
             enddo
         enddo
 
         ! calculate total working income
-        do ij = 1, JJ
+        total_INC = 0d0
+        do ij = 1, JR 
             do iw = 1, NW
                 do ir = 1, NR
                     total_INC = total_INC + (w(ir)*eff(ij)*zeta(iw))&
@@ -965,11 +973,11 @@ print*, 'BB_a:', BB_a, 'BB_b:', BB_b, 'BB_c:', BB_c, 'BB', BB
                 enddo
             enddo
         enddo
-        
-
         ! calculate budget-balancing income tax rate
         tauw = total_pen/total_INC
-print*, 'tauw', tauw
+        
+print*, 'tauw', tauw, 'total_pen, total_INC', total_pen, total_INC
+
     end subroutine
 
 

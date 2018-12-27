@@ -95,7 +95,7 @@ module globals
     real*8, parameter :: damp    = 0.30d0
     real*8, parameter :: Damp_rb    = 0.7d0
     real*8, parameter :: sig     = 1d-4
-    integer, parameter :: itermax = 30
+    integer, parameter :: itermax = 50
     
     ! borrowing cost
     real*8, parameter :: b_cost = 0.01d0
@@ -108,7 +108,7 @@ module globals
     real*8 :: rb, rk(NR), rb_a, rb_b, rb_c
     real*8 :: AA, KK, BB, LL, HH
     real*8 :: BB_a, BB_b, BB_c
-    real*8 :: YY, CC, II, INC
+    real*8 :: YY, CC, II, INC, PP, workpop
 
     ! government variables
     real*8 :: tauw
@@ -116,6 +116,7 @@ module globals
 
     ! wages, transfer payments (old-age) and survival probabilities
     real*8 :: w(NR), wn(NR), eff(JJ), pen(JJ, NR), psi(JJ+1)
+    real*8 :: wf
 
     ! cohort aggregate variables
     real*8 :: c_coh(JJ), y_coh(JJ), a_coh(JJ), o_coh(JJ)
@@ -178,6 +179,7 @@ contains
             do ir = 1, NR
 
                 ! get return on the portfolio
+
                 R_port = 1d0 + rb + omega_p*(rk(ir) - rb)
 
                 ! get tomorrow's cash-on-hand (epsilon^+ = 0)
@@ -194,7 +196,6 @@ contains
                       (1d0-varphi)*c(ij_com+1, ixr)
                 c_p = max(c_p, 1d-10)
                 foc_port = foc_port + dist*(rk(ir) - rb)*a(ia_com)*margu(c_p)
-
             enddo
         else
             do iw = 1, NW
