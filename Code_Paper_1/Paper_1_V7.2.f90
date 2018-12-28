@@ -150,6 +150,12 @@ print*, 'm(ij):', ij, m(ij)
         enddo
 print*, 'wf', wf
 
+!~         ! variable wage
+!~         do ir = 1, NR
+!~             w(ir) = TProd(ir)*(1d0-alpha)*(KK/LL)**alpha
+!~ print*, 'w', w(ir)
+!~         enddo
+
         ! calculate return on risky asset
         do ir = 1, NR
             rk(ir) = (TProd(ir)*KK**alpha*LL**(1d0-alpha)-w(ir)*LL)/KK
@@ -168,12 +174,14 @@ print*, 'rb_end', rb
         ! calculate after-tax wage rate
         do ir = 1, NR
             wn(ir) = w(ir)*(1d0-tauw)
+!~ print*, 'wn(iv)', wn(ir)
         enddo
         ! old-age transfers
         pen(:,:) = 0d0
 
         do ir = 1, NR
             pen(JR:JJ, ir) = kappa*w(ir)*eff(JR-1)
+!~             pen(JR:JJ, ir) = max(kappa*w(ir)*eff(JR-1), 1d-10)
 print*, 'pension iv', pen(JJ, ir)
         enddo
 
@@ -268,6 +276,7 @@ print*, 'pension iv', pen(JJ, ir)
 
             omega_plus(ij, ia) = x_in
 
+            ! reset tolerance level to original value
             call settol_root(1d-8)
         endif
 
@@ -337,7 +346,9 @@ print*, 'pension iv', pen(JJ, ir)
 
                 do ir = 1, NR
 
+                    ! get return on the portfolio
                     R_port = 1d0 + rb + omega_plus(ij, ia)*(rk(ir) - rb)
+        
 
                     ! get tomorrow's cash-on-hand (epsilon^+ = 0)
                     X_p = R_port*a(ia) + pen(ij+1, ir)
@@ -358,7 +369,6 @@ print*, 'pension iv', pen(JJ, ir)
                     ! get RHS of foc and Q
                     RHS(ij, ia) = RHS(ij, ia) + dist*R_port*margu(c_p)
                     Q(ij, ia)   = Q(ij, ia) + dist*EV**egam/egam
-
                 enddo
 
             ! agent is working
@@ -367,8 +377,7 @@ print*, 'pension iv', pen(JJ, ir)
                     do ir = 1, NR
                         do is = 1, NS
 
-                            ! get return on the portfolio
-
+                            ! get return on the portfolio                                   
                             R_port = 1d0 + rb + omega_plus(ij, ia)*(rk(ir) - rb)
                             
                             ! get tomorrow's cash on hand
@@ -468,7 +477,6 @@ print*, 'pension iv', pen(JJ, ir)
                         do is = 1, NS
 
                             ! get today's cash-on-hand
-
                             R_port = 1d0 + rb + omega_plus(ij-1, ia)*(rk(ir) - rb)
                             
                             X_p = R_port*a(ia)/eps(is) + wn(ir)*eff(ij)*zeta(iw)
@@ -495,7 +503,6 @@ print*, 'pension iv', pen(JJ, ir)
                 do ir = 1, NR
 
                     ! get today's cash-on-hand
-
                     R_port = 1d0 + rb + omega_plus(ij-1, ia)*(rk(ir) - rb)
                     
                     X_p = R_port*a(ia) + pen(ij, ir)
@@ -547,7 +554,7 @@ print*, 'pension iv', pen(JJ, ir)
 
         implicit none
         integer :: ij, ix, ia, ie, iw, ir
-        real*8 :: sigma_eta(JJ), mu_exp(JJ), sigma_exp(JJ)
+        real*8 :: sigma_eta(JJ), mu_exp(JJ), sigma_exp(JJ), mu_avg
         real*8 :: var_c(JJ), var_a(JJ), var_y(JJ), var_o(JJ)
         real*8 :: LL_old, KK_old, BB_old
 
@@ -628,42 +635,43 @@ print*, 'ij:', ij, 'y:', y_coh(ij), 'o:', o_coh(ij),'a:', a_coh(ij),'k:',&
 
         endif
 
-        ! calculate aggregate quantities
-        BB = 0d0
-        do ij = 1, JJ
-            BB = BB + b_coh(ij)*m(ij)
-        enddo
+!~         ! calculate aggregate quantities
+!~         BB = 0d0
+!~         do ij = 1, JJ
+!~             BB = BB + b_coh(ij)*m(ij)
+!~         enddo
         
-        if (abs(BB) < sig) then
-            CC = 0d0
-            LL = 0d0
-            AA = 0d0
-            KK = 0d0
-            BB = 0d0
-            workpop = 0d0
-            do ij = 1, JJ
-                CC = CC + c_coh(ij)*m(ij)
-                LL = LL + l_coh(ij)*m(ij)
-                AA = AA + a_coh(ij)*m(ij)
-                KK = KK + k_coh(ij)*m(ij)
-                BB = BB + b_coh(ij)*m(ij)
-                if(ij < JR) workpop = workpop + m(ij)
-            enddo
+!~         if (abs(BB) < sig) then
+!~             CC = 0d0
+!~             LL = 0d0
+!~             AA = 0d0
+!~             KK = 0d0
+!~             BB = 0d0
+!~             workpop = 0d0
+!~             do ij = 1, JJ
+!~                 CC = CC + c_coh(ij)*m(ij)
+!~                 LL = LL + l_coh(ij)*m(ij)
+!~                 AA = AA + a_coh(ij)*m(ij)
+!~                 KK = KK + k_coh(ij)*m(ij)
+!~                 BB = BB + b_coh(ij)*m(ij)
+!~                 if(ij < JR) workpop = workpop + m(ij)
+!~             enddo
 
-            ! damping and other quantities [damping acording to Gauss-Seidel procedure]
-            KK = damp*(KK) + (1d0-damp)*KK_old 
-            LL = damp*LL + (1d0-damp)*LL_old
-            II = (n_p)*KK !(n_p+delta)*KK
-            YY = TProd_bar*KK**alpha*LL**(1d0-alpha)
+!~             ! damping and other quantities [damping acording to Gauss-Seidel procedure]
+!~             KK = damp*(KK) + (1d0-damp)*KK_old 
+!~             LL = damp*LL + (1d0-damp)*LL_old
+!~             II = (n_p)*KK !(n_p+delta)*KK
+!~             YY = TProd_bar*KK**alpha*LL**(1d0-alpha)
    
-            ! get average income and average working hours
-            INC = wf*LL/workpop
+!~             ! get average income and average working hours
+!~             INC = wf*LL/workpop
 
-            ! get difference on goods market
-            DIFF = YY-CC-II
-        endif
+!~             ! get difference on goods market
+!~             DIFF = YY-CC-II
+!~         endif
         
-print*, 'KK:', KK, 'BB', BB, 'LL:', LL, 'YY:', YY, 'CC:', CC, 'II:', II, 'DIFF:', DIFF
+!~ print*, 'KK:', KK, 'BB', BB, 'LL:', LL, 'YY:', YY, 'CC:', CC, 'II:', II, &
+!~ 'DIFF:', DIFF, 'abs DIFF', abs(DIFF/YY)*100d0
 
         ! calculate variances
         var_c = 0d0
@@ -744,8 +752,62 @@ print*, 'KK:', KK, 'BB', BB, 'LL:', LL, 'YY:', YY, 'CC:', CC, 'II:', II, 'DIFF:'
             y_coh = mu_exp*y_coh
             c_coh = mu_exp*c_coh
             a_coh = mu_exp*a_coh
+            l_coh = mu_exp*l_coh
+            k_coh = mu_exp*k_coh
+            b_coh = mu_exp*b_coh
         endif
+do ij = 1,12
+    mu_avg = mu_avg + mu_exp(ij)/12d0
+enddo
+print*, mu_exp
+print*,'mu_avg', mu_avg
 
+!##############################################################################
+        ! calculate non-normalized aggregate quantities
+
+print*, '!##############################################################################'
+do ij = 1, JJ
+    print*, 'ij:', ij, 'y:', y_coh(ij), 'o:', o_coh(ij),'a:', a_coh(ij),'k:',&
+ k_coh(ij),'b:', b_coh(ij),'c:', c_coh(ij), 'l:', l_coh(ij)
+enddo
+
+        BB = 0d0
+        do ij = 1, JJ
+            BB = BB + b_coh(ij)*m(ij)
+        enddo
+        
+        if (abs(BB) < sig) then
+            CC = 0d0
+            LL = 0d0
+            AA = 0d0
+            KK = 0d0
+            BB = 0d0
+            workpop = 0d0
+            do ij = 1, JJ
+                CC = CC + c_coh(ij)*m(ij)
+                LL = LL + l_coh(ij)*m(ij)
+                AA = AA + a_coh(ij)*m(ij)
+                KK = KK + k_coh(ij)*m(ij)
+                BB = BB + b_coh(ij)*m(ij)
+                if(ij < JR) workpop = workpop + m(ij)
+            enddo
+
+            ! damping and other quantities [damping acording to Gauss-Seidel procedure]
+            KK = damp*(KK) + (1d0-damp)*KK_old 
+            LL = damp*LL + (1d0-damp)*LL_old
+            II = (n_p)*KK !(n_p+delta)*KK
+            YY = TProd_bar*KK**alpha*LL**(1d0-alpha)
+   
+            ! get average income and average working hours
+            INC = wf*LL/workpop
+
+            ! get difference on goods market
+            DIFF = YY-CC-II
+        endif
+print*, 'KK:', KK, 'BB', BB, 'LL:', LL, 'YY:', YY, 'CC:', CC, 'II:', II, &
+'DIFF:', DIFF, 'DIFF/YY', abs(DIFF/YY)*100d0
+
+!##############################################################################
         ! calculate coefficients of variation
         cv_y = sqrt(max(var_y, 0d0))/max(y_coh, 1d-10)
         cv_c = sqrt(max(var_c, 0d0))/max(c_coh, 1d-10)
@@ -899,20 +961,23 @@ print*, 'KK:', KK, 'BB', BB, 'LL:', LL, 'YY:', YY, 'CC:', CC, 'II:', II, 'DIFF:'
 
 print*, 'rb1', rb
         if (iterb == 1 .and. BB > 0d0 .and. abs(BB)>= sig) then
+!~         if (iter == 1 .and. iterb == 1 .and. BB > 0d0 .and. abs(BB)>= sig) then
 
             rb_a = rb
             rb_b = rb-0.5d0
             if (rb_b <= 0) rb_b = 0.01d0
 print*, 'rb2', rb
-
+!~             rb_b = rb*(1d0-Damp_rb)
 print*, 'rb_b', rb_b
 
             BB_a = BB
             rb = rb_b
         elseif (iterb == 1 .and. BB < 0d0 .and. abs(BB)>= sig) then
+!~         elseif (iter == 1 .and. iterb == 1 .and. BB < 0d0 .and. abs(BB)>= sig) then
 
             rb_a = rb
             rb_b = rb+0.5d0
+!~             rb_b = rb*(1d0+Damp_rb)
             BB_a = BB
             rb = rb_b
         elseif (iterb == 2) then
@@ -975,6 +1040,21 @@ print*, 'BB_a:', BB_a, 'BB_b:', BB_b, 'BB_c:', BB_c, 'BB', BB
         enddo
         ! calculate budget-balancing income tax rate
         tauw = total_pen/total_INC
+!~ !##############################################################################
+        
+!~         ! get budget balancing social security contribution
+!~         pen(JR:JJ,:) = kappa*INC
+!~ print*, 'working pop', workpop, 'INC', INC
+!~ print*, pen
+!~         PP = 0d0
+!~         do ij = JR, JJ
+!~             do ir = 1, NR
+!~                 PP = PP + pen(ij, ir)*m(ij)*dist_Tprod(ir)
+!~             enddo 
+!~         enddo
+
+!~         tauw = PP/(wf*LL)
+!##############################################################################
         
 print*, 'tauw', tauw, 'total_pen, total_INC', total_pen, total_INC
 

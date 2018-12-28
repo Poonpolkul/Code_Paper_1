@@ -179,7 +179,6 @@ contains
             do ir = 1, NR
 
                 ! get return on the portfolio
-
                 R_port = 1d0 + rb + omega_p*(rk(ir) - rb)
 
                 ! get tomorrow's cash-on-hand (epsilon^+ = 0)
